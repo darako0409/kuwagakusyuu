@@ -1,0 +1,15 @@
+# フロントエンド (Vite/React)
+node_modules/
+dist/
+.env
+
+# バックエンド (Python)
+__pycache__/
+venv/
+env/
+*.pyc
+
+# データベース
+*.db
+*.sqlite3
+app.db
