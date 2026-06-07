@@ -140,6 +140,12 @@
   font-weight: 600;
 }
 
+.nav-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: 20px 0;

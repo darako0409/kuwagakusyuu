@@ -567,11 +567,9 @@ function Dashboard() {
           <div 
             className={`nav-item ${activeTab === 'help' ? 'active' : ''}`}
             onClick={() => handleTabChange('help')}
-            title="ヘルプ"
             title="ヘルプ・使い方ガイド"
           >
             <span className="nav-icon">❓</span>
-            {isSidebarOpen && <span className="nav-text">ヘルプ</span>}
             {isSidebarOpen && <span className="nav-text">ヘルプ・使い方ガイド</span>}
           </div>
         </nav>
@@ -614,7 +612,6 @@ function Dashboard() {
               <header className="dashboard-header">
                 <div>
                   <p style={{ margin: '0 0 4px 0', color: '#64748b', fontWeight: '600' }}>
-                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'サポート' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
                     {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'ヘルプ・使い方ガイド' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
                   </p>
                   <h2 className="welcome-text">
