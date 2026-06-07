@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import './Dashboard.css';
 
 function Dashboard() {
+  const { tab, itemId } = useParams();
+  const activeTab = tab || 'home';
+
   const [user, setUser] = useState(null);
   const [lessons, setLessons] = useState([]); // 授業資料
   const [assignments, setAssignments] = useState([]); // 課題
   const [students, setStudents] = useState([]); // 生徒の一覧
   const [progresses, setProgresses] = useState([]); // 生徒の進捗状況
-  const [activeAssignment, setActiveAssignment] = useState(null); // 現在取り組んでいる課題
-  const [activeLesson, setActiveLesson] = useState(null); // 現在見ている授業資料
-  const [activeTab, setActiveTab] = useState('home'); // サイドメニューの選択状態
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768); // サイドバーの開閉状態
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true'); // ダークモード状態
   const [newLesson, setNewLesson] = useState({ title: '', content: '', chapter_id: 1 });
@@ -22,6 +22,9 @@ function Dashboard() {
   const [selectedSubmitAssignment, setSelectedSubmitAssignment] = useState('');
   const [trashData, setTrashData] = useState(null); // ゴミ箱のデータ
   const navigate = useNavigate();
+
+  const activeLesson = activeTab === 'lessons' && itemId ? lessons.find(l => l.id.toString() === itemId) : null;
+  const activeAssignment = activeTab === 'assignments' && itemId ? assignments.find(a => a.id.toString() === itemId) : null;
 
   // --- Toast（通知）用の状態管理 ---
   const [toast, setToast] = useState({ message: '', type: 'success', visible: false });
@@ -40,9 +43,7 @@ function Dashboard() {
 
   // --- タブ切り替えとモバイル用サイドバー制御 ---
   const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-    setActiveLesson(null);
-    setActiveAssignment(null);
+    navigate(`/dashboard/${tabId}`);
     if (window.innerWidth <= 768) {
       setIsSidebarOpen(false); // スマホの場合はメニューを選んだら自動で閉じる
     }
@@ -201,8 +202,7 @@ function Dashboard() {
         status: '完了'
       }, { headers: { Authorization: `Bearer ${token}` } });
       showToast("この資料を学習済みにしました！", 'success');
-      setActiveLesson(null);
-      setActiveTab('home');
+      navigate('/dashboard/home');
       fetchProgresses(); // 進捗を再取得して最新状態を反映
     } catch(e) {
       showToast("進捗の保存に失敗しました。", 'error');
@@ -311,9 +311,8 @@ function Dashboard() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
       });
       showToast("課題を提出しました！", 'success');
-      setActiveAssignment(null);
       if (activeTab === 'assignments') {
-        setActiveTab('home');
+        navigate('/dashboard/home');
       }
       setSubmitFile(null);
       setSelectedSubmitAssignment('');
@@ -569,9 +568,11 @@ function Dashboard() {
             className={`nav-item ${activeTab === 'help' ? 'active' : ''}`}
             onClick={() => handleTabChange('help')}
             title="ヘルプ"
+            title="ヘルプ・使い方ガイド"
           >
             <span className="nav-icon">❓</span>
             {isSidebarOpen && <span className="nav-text">ヘルプ</span>}
+            {isSidebarOpen && <span className="nav-text">ヘルプ・使い方ガイド</span>}
           </div>
         </nav>
 
@@ -602,7 +603,6 @@ function Dashboard() {
               <span className="user-name">{user.username} さん</span>
               <div className="user-avatar">{user.username.charAt(0).toUpperCase()}</div>
             </div>
-            <div className="header-icon">⚙️</div>
             <button onClick={handleLogout} className="logout-btn">ログアウト</button>
           </div>
         </header>
@@ -615,6 +615,7 @@ function Dashboard() {
                 <div>
                   <p style={{ margin: '0 0 4px 0', color: '#64748b', fontWeight: '600' }}>
                     {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'サポート' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
+                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'ヘルプ・使い方ガイド' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
                   </p>
                   <h2 className="welcome-text">
                     {activeTab === 'home' ? `ようこそ、${user.username} さん！` : activeTab === 'lessons' ? '学習する章を選びましょう' : activeTab === 'assignments' ? '取り組む課題を選びましょう' : activeTab === 'submit_box' ? '課題の提出と確認' : activeTab === 'progress' ? '現在の進捗状況' : activeTab === 'trash' ? '削除されたアイテム' : activeTab === 'help' ? '使い方ガイド' : activeTab === 'about' ? 'About' : activeTab === 'contact' ? 'Contact' : activeTab === 'privacy' ? 'Privacy Policy' : activeTab === 'terms' ? 'Terms of Service' : 'アプリケーションの設定'}
@@ -626,7 +627,7 @@ function Dashboard() {
             {/* 授業資料の詳細画面（美しくレンダリング） */}
             {activeLesson ? (
               <div className="detail-view">
-                <button onClick={() => { setActiveLesson(null); setIsEditingLesson(false); }} className="back-btn">
+                <button onClick={() => { navigate('/dashboard/lessons'); setIsEditingLesson(false); }} className="back-btn">
                   <span>←</span> ホームへ戻る
                 </button>
                 
@@ -680,7 +681,7 @@ function Dashboard() {
               </div>
             ) : activeAssignment ? (
               <div className="detail-view">
-                <button onClick={() => setActiveAssignment(null)} className="back-btn">
+                <button onClick={() => navigate('/dashboard/assignments')} className="back-btn">
                   <span>←</span> ホームへ戻る
                 </button>
                 
@@ -725,7 +726,7 @@ function Dashboard() {
                     {lessons.length === 0 ? <p className="empty-state">現在登録されている資料はありません。</p> : (
                       <div className="item-list">
                         {lessons.map(lesson => (
-                          <div key={lesson.id} onClick={() => setActiveLesson(lesson)} className="lesson-item">
+                          <div key={lesson.id} onClick={() => navigate(`/dashboard/lessons/${lesson.id}`)} className="lesson-item">
                             <strong>{lesson.title}</strong>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                               <span className="action-text">
@@ -778,7 +779,7 @@ function Dashboard() {
                               <span className="status-badge">未着手</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <button onClick={() => setActiveAssignment(assignment)} className="challenge-btn">
+                              <button onClick={() => navigate(`/dashboard/assignments/${assignment.id}`)} className="challenge-btn">
                                 挑戦する
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
                               </button>
