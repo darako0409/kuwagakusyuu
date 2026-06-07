@@ -35,6 +35,31 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 models.Base.metadata.create_all(bind=engine)
 
+# --- データベースの自動アップデート（本番環境でのカラム不足エラー対策） ---
+def upgrade_db():
+    from sqlalchemy import text
+    tables = ["users", "lessons", "assignments", "progresses"]
+    for table in tables:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN deleted_at TIMESTAMP"))
+        except Exception:
+            pass
+        
+        if table == "progresses":
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE progresses ADD COLUMN submitted_file_url VARCHAR"))
+            except Exception:
+                pass
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE progresses ADD COLUMN submitted_file_name VARCHAR"))
+            except Exception:
+                pass
+
+upgrade_db()
+
 def init_db():
     db = SessionLocal()
     try:
@@ -111,8 +136,8 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["https://kuwagakusyuu.vercel.app", "http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
