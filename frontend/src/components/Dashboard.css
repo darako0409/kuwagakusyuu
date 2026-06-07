@@ -1260,3 +1260,36 @@
     justify-content: center;
   }
 }
+
+/* --- ヘルプ画面専用スタイル --- */
+.help-content {
+  margin-top: 16px;
+}
+
+.help-section-title {
+  font-size: 1.25rem;
+  color: #0f172a;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  margin-top: 0;
+}
+
+.help-list {
+  line-height: 1.8;
+  color: #334155;
+  padding-left: 24px;
+}
+
+.help-list li {
+  margin-bottom: 8px;
+}
+
+.dark-mode .help-section-title {
+  color: #f8fafc;
+  border-bottom-color: #334155;
+}
+
+.dark-mode .help-list {
+  color: #cbd5e1;
+}

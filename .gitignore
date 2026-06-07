@@ -13,3 +13,7 @@ env/
 *.db
 *.sqlite3
 app.db
+
+# 秘密鍵とアップロードファイル
+backend/credentials.json
+backend/uploads/

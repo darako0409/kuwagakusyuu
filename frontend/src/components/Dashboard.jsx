@@ -565,7 +565,11 @@ function Dashboard() {
 
         <nav className="nav-group">
           <div className="nav-title">{isSidebarOpen ? 'サポート' : '…'}</div>
-          <div className="nav-item" title="ヘルプ">
+          <div 
+            className={`nav-item ${activeTab === 'help' ? 'active' : ''}`}
+            onClick={() => handleTabChange('help')}
+            title="ヘルプ"
+          >
             <span className="nav-icon">❓</span>
             {isSidebarOpen && <span className="nav-text">ヘルプ</span>}
           </div>
@@ -610,10 +614,10 @@ function Dashboard() {
               <header className="dashboard-header">
                 <div>
                   <p style={{ margin: '0 0 4px 0', color: '#64748b', fontWeight: '600' }}>
-                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : '設定'}
+                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'サポート' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
                   </p>
                   <h2 className="welcome-text">
-                    {activeTab === 'home' ? `ようこそ、${user.username} さん！` : activeTab === 'lessons' ? '学習する章を選びましょう' : activeTab === 'assignments' ? '取り組む課題を選びましょう' : activeTab === 'submit_box' ? '課題の提出と確認' : activeTab === 'progress' ? '現在の進捗状況' : activeTab === 'trash' ? '削除されたアイテム' : 'アプリケーションの設定'}
+                    {activeTab === 'home' ? `ようこそ、${user.username} さん！` : activeTab === 'lessons' ? '学習する章を選びましょう' : activeTab === 'assignments' ? '取り組む課題を選びましょう' : activeTab === 'submit_box' ? '課題の提出と確認' : activeTab === 'progress' ? '現在の進捗状況' : activeTab === 'trash' ? '削除されたアイテム' : activeTab === 'help' ? '使い方ガイド' : activeTab === 'about' ? 'About' : activeTab === 'contact' ? 'Contact' : activeTab === 'privacy' ? 'Privacy Policy' : activeTab === 'terms' ? 'Terms of Service' : 'アプリケーションの設定'}
                   </h2>
                 </div>
               </header>
@@ -1066,6 +1070,72 @@ function Dashboard() {
                   </div>
                 )}
 
+                {/* ヘルプエリア */}
+                {activeTab === 'help' && (
+                  <div className="module-card full-width" style={{ flex: '1 1 100%' }}>
+                    <h3 className="module-title">❓ ヘルプ・使い方ガイド</h3>
+                    
+                    <div className="help-content">
+                      <h4 className="help-section-title">本サイトの使い方</h4>
+                      <p>Kuwaga学習サイトでは、以下のメニューを使って学習を進めます。</p>
+                      <ul className="help-list">
+                        <li><strong>🏠 ホーム:</strong> ダッシュボードのトップ画面です。新着の資料や課題にアクセスできます。</li>
+                        <li><strong>📚 授業資料:</strong> 授業のテキストやスライドを閲覧できます。学習が終わったら「学習済みにする」ボタンを押して進捗を記録しましょう。</li>
+                        <li><strong>✍️ 課題:</strong> 提出用の課題を確認できます。必要なファイルをダウンロードし、課題に取り組みます。</li>
+                        <li><strong>📥 提出BOX:</strong> 完成した課題ファイルをアップロードして提出します。過去の提出履歴もここで確認できます。</li>
+                        <li><strong>📊 学習進捗:</strong> 自分（または生徒全体）の学習状況や課題の提出ステータスを確認できます。</li>
+                      </ul>
+
+                      <h4 className="help-section-title" style={{ marginTop: '40px' }}>Google ColabでのExcelファイルのマウント（読み込み）方法</h4>
+                      <p>課題などで配布されたExcelファイルをGoogle Colabで読み込むには、以下の手順でGoogle Driveをマウントします。</p>
+                      
+                      <div className="code-block" style={{ marginTop: '16px' }}>
+                        <pre>
+                          <span className="code-line">from google.colab import drive</span>
+                          <span className="code-line">drive.mount('/content/drive')</span>
+                        </pre>
+                      </div>
+                      
+                      <ol className="help-list" style={{ marginTop: '16px' }}>
+                        <li>上記のコードをColabのセルに入力し、実行します。</li>
+                        <li>「Google ドライブに接続」というポップアップが出たら、許可してアカウントを選択します。</li>
+                        <li>マウントが完了したら、左側のフォルダアイコン（ファイルエクスプローラー）を開き、<code>drive/MyDrive/...</code> の中から対象のExcelファイルを探します。</li>
+                        <li>対象ファイルの右側にある「︙」をクリックし、「パスをコピー」を選択して、Pythonコード内で読み込みパスとして使用します。</li>
+                      </ol>
+                      
+                      <div className="code-block" style={{ marginTop: '16px' }}>
+                        <pre>
+                          <span className="code-line">import pandas as pd</span>
+                          <span className="code-line"># コピーしたパスを貼り付けて読み込む</span>
+                          <span className="code-line">df = pd.read_excel('/content/drive/MyDrive/〇〇/課題ファイル.xlsx')</span>
+                          <span className="code-line">print(df.head())</span>
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* About等 その他の静的ページ */}
+                {activeTab === 'about' && (
+                  <div className="module-card full-width" style={{ flex: '1 1 100%' }}>
+                    <h3 className="module-title">ℹ️ About Kuwaga学習サイト</h3>
+                    <p className="module-desc">Kuwaga学習サイトは、情報Ⅰのプログラミング学習をサポートするためのプラットフォームです。</p>
+                    <div style={{ lineHeight: '1.8', color: isDarkMode ? '#cbd5e1' : '#334155' }}>
+                      <p>本サイトでは、PythonやVBAなどのプログラミング言語の基礎から応用まで、授業資料の閲覧と実践的な課題提出を通じてシームレスに学ぶことができます。</p>
+                      <p style={{ marginTop: '16px' }}>バージョン: 1.0.0</p>
+                    </div>
+                  </div>
+                )}
+
+                {['contact', 'privacy', 'terms'].includes(activeTab) && (
+                  <div className="module-card full-width" style={{ flex: '1 1 100%' }}>
+                    <h3 className="module-title">
+                      {activeTab === 'contact' ? '✉️ お問い合わせ' : activeTab === 'privacy' ? '🛡️ プライバシーポリシー' : '📝 利用規約'}
+                    </h3>
+                    <p className="module-desc">現在準備中です。</p>
+                  </div>
+                )}
+
                 {/* ④ 設定エリア */}
                 {activeTab === 'settings' && (
                   <div className="module-card full-width" style={{ flex: '1 1 100%' }}>
@@ -1090,10 +1160,10 @@ function Dashboard() {
         </main>
         
         <footer className="main-footer">
-          <a href="#">Contact</a>
-          <a href="#">Privacy</a>
-          <a href="#">Terms</a>
-          <a href="#">About</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); handleTabChange('contact'); }}>Contact</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); handleTabChange('privacy'); }}>Privacy</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); handleTabChange('terms'); }}>Terms</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); handleTabChange('about'); }}>About</a>
         </footer>
       </div>
     </div>
