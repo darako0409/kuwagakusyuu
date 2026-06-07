@@ -567,10 +567,10 @@ function Dashboard() {
           <div 
             className={`nav-item ${activeTab === 'help' ? 'active' : ''}`}
             onClick={() => handleTabChange('help')}
-            title="ヘルプ・使い方ガイド"
+            title="ヘルプ・使い方"
           >
             <span className="nav-icon">❓</span>
-            {isSidebarOpen && <span className="nav-text">ヘルプ・使い方ガイド</span>}
+            {isSidebarOpen && <span className="nav-text">ヘルプ・使い方</span>}
           </div>
         </nav>
 
@@ -612,10 +612,10 @@ function Dashboard() {
               <header className="dashboard-header">
                 <div>
                   <p style={{ margin: '0 0 4px 0', color: '#64748b', fontWeight: '600' }}>
-                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'ヘルプ・使い方ガイド' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
+                    {activeTab === 'home' ? '学習ダッシュボード' : activeTab === 'lessons' ? '授業資料' : activeTab === 'assignments' ? '課題' : activeTab === 'submit_box' ? '提出BOX' : activeTab === 'progress' ? '学習進捗' : activeTab === 'trash' ? 'ゴミ箱' : activeTab === 'help' ? 'ヘルプ・使い方' : activeTab === 'about' ? 'サイトについて' : activeTab === 'contact' ? 'お問い合わせ' : activeTab === 'privacy' ? 'プライバシーポリシー' : activeTab === 'terms' ? '利用規約' : '設定'}
                   </p>
                   <h2 className="welcome-text">
-                    {activeTab === 'home' ? `ようこそ、${user.username} さん！` : activeTab === 'lessons' ? '学習する章を選びましょう' : activeTab === 'assignments' ? '取り組む課題を選びましょう' : activeTab === 'submit_box' ? '課題の提出と確認' : activeTab === 'progress' ? '現在の進捗状況' : activeTab === 'trash' ? '削除されたアイテム' : activeTab === 'help' ? '使い方ガイド' : activeTab === 'about' ? 'About' : activeTab === 'contact' ? 'Contact' : activeTab === 'privacy' ? 'Privacy Policy' : activeTab === 'terms' ? 'Terms of Service' : 'アプリケーションの設定'}
+                    {activeTab === 'home' ? `ようこそ、${user.username} さん！` : activeTab === 'lessons' ? '学習する章を選びましょう' : activeTab === 'assignments' ? '取り組む課題を選びましょう' : activeTab === 'submit_box' ? '課題の提出と確認' : activeTab === 'progress' ? '現在の進捗状況' : activeTab === 'trash' ? '削除されたアイテム' : activeTab === 'help' ? 'ヘルプ・使い方' : activeTab === 'about' ? 'About' : activeTab === 'contact' ? 'Contact' : activeTab === 'privacy' ? 'Privacy Policy' : activeTab === 'terms' ? 'Terms of Service' : 'アプリケーションの設定'}
                   </h2>
                 </div>
               </header>
@@ -1071,7 +1071,7 @@ function Dashboard() {
                 {/* ヘルプエリア */}
                 {activeTab === 'help' && (
                   <div className="module-card full-width" style={{ flex: '1 1 100%' }}>
-                    <h3 className="module-title">❓ ヘルプ・使い方ガイド</h3>
+                    <h3 className="module-title">❓ ヘルプ・使い方</h3>
                     
                     <div className="help-content">
                       <h4 className="help-section-title">本サイトの使い方</h4>
