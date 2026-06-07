@@ -12,7 +12,7 @@ function Dashboard() {
   const [activeAssignment, setActiveAssignment] = useState(null); // 現在取り組んでいる課題
   const [activeLesson, setActiveLesson] = useState(null); // 現在見ている授業資料
   const [activeTab, setActiveTab] = useState('home'); // サイドメニューの選択状態
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // サイドバーの開閉状態
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768); // サイドバーの開閉状態
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true'); // ダークモード状態
   const [newLesson, setNewLesson] = useState({ title: '', content: '', chapter_id: 1 });
   const [isEditingLesson, setIsEditingLesson] = useState(false);
@@ -36,6 +36,16 @@ function Dashboard() {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 3000);
     setToastTimeout(timeout);
+  };
+
+  // --- タブ切り替えとモバイル用サイドバー制御 ---
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setActiveLesson(null);
+    setActiveAssignment(null);
+    if (window.innerWidth <= 768) {
+      setIsSidebarOpen(false); // スマホの場合はメニューを選んだら自動で閉じる
+    }
   };
 
   // --- 確認ダイアログ用の状態管理 ---
@@ -198,6 +208,19 @@ function Dashboard() {
       showToast("進捗の保存に失敗しました。", 'error');
     }
   };
+
+  // ウィンドウのサイズ変更を検知してサイドバーの開閉を自動制御する
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 768) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -490,7 +513,7 @@ function Dashboard() {
           <div className="nav-title">{isSidebarOpen ? 'メニュー' : '…'}</div>
           <div 
             className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('home'); setActiveLesson(null); setActiveAssignment(null); }}
+            onClick={() => handleTabChange('home')}
             title="ホーム"
           >
             <span className="nav-icon">🏠</span>
@@ -498,7 +521,7 @@ function Dashboard() {
           </div>
           <div 
             className={`nav-item ${activeTab === 'lessons' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('lessons'); setActiveLesson(null); setActiveAssignment(null); }}
+            onClick={() => handleTabChange('lessons')}
             title={user.role === 'teacher' ? "授業資料設定" : "授業資料"}
           >
             <span className="nav-icon">📚</span>
@@ -506,7 +529,7 @@ function Dashboard() {
           </div>
           <div 
             className={`nav-item ${activeTab === 'assignments' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('assignments'); setActiveLesson(null); setActiveAssignment(null); }}
+            onClick={() => handleTabChange('assignments')}
             title={user.role === 'teacher' ? "課題設定" : "課題"}
           >
             <span className="nav-icon">✍️</span>
@@ -514,7 +537,7 @@ function Dashboard() {
           </div>
           <div 
             className={`nav-item ${activeTab === 'submit_box' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('submit_box'); setActiveLesson(null); setActiveAssignment(null); }}
+            onClick={() => handleTabChange('submit_box')}
             title="提出BOX"
           >
             <span className="nav-icon">📥</span>
@@ -522,7 +545,7 @@ function Dashboard() {
           </div>
           <div 
             className={`nav-item ${activeTab === 'progress' ? 'active' : ''}`} 
-            onClick={() => { setActiveTab('progress'); setActiveLesson(null); setActiveAssignment(null); fetchProgresses(); }}
+            onClick={() => { handleTabChange('progress'); fetchProgresses(); }}
             title="学習進捗"
           >
             <span className="nav-icon">📊</span>
@@ -531,7 +554,7 @@ function Dashboard() {
           {user.role === 'teacher' && (
             <div 
               className={`nav-item ${activeTab === 'trash' ? 'active' : ''}`} 
-              onClick={() => { setActiveTab('trash'); setActiveLesson(null); setActiveAssignment(null); fetchTrash(); }}
+              onClick={() => { handleTabChange('trash'); fetchTrash(); }}
               title="ゴミ箱"
             >
               <span className="nav-icon">🗑️</span>
@@ -551,7 +574,7 @@ function Dashboard() {
         <div className="sidebar-footer">
           <div 
             className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('settings'); setActiveLesson(null); setActiveAssignment(null); }}
+            onClick={() => handleTabChange('settings')}
             title="設定"
           >
             <span className="nav-icon">⚙️</span>
@@ -560,9 +583,15 @@ function Dashboard() {
         </div>
       </aside>
 
+      {/* モバイル用オーバーレイ（メニューが開いているときの背景の暗い部分） */}
+      <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
+
       {/* B & C. メイン領域 */}
       <div className="main-area">
         <header className="top-header">
+          <button className="mobile-menu-btn" onClick={() => setIsSidebarOpen(true)} title="メニューを開く">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
           <div className="user-profile">
             <span className={`role-badge ${user.role === 'teacher' ? 'teacher' : 'student'}`}>{user.role === 'teacher' ? '教員アカウント' : '生徒アカウント'}</span>
             <div className="user-info">

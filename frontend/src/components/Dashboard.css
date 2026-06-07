@@ -1132,3 +1132,131 @@
 .dark-mode .confirm-dialog h3, .dark-mode .confirm-dialog p { color: #f8fafc !important; }
 .dark-mode .confirm-btn.cancel { background-color: #334155; color: #cbd5e1; }
 .dark-mode .confirm-btn.cancel:hover { background-color: #475569; }
+
+/* --- モバイル対応（レスポンシブデザイン） --- */
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-right: auto;
+}
+
+.dark-mode .mobile-menu-btn {
+  color: #f8fafc;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 900;
+  backdrop-filter: blur(2px);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    transform: translateX(-100%);
+    width: 260px !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 15px rgba(0,0,0,0.1);
+  }
+
+  .sidebar.open {
+    transform: translateX(0) !important;
+  }
+  
+  .sidebar.closed {
+    transform: translateX(-100%) !important;
+  }
+
+  .sidebar-toggle-btn {
+    display: none;
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+    animation: fadeIn 0.3s;
+  }
+
+  .top-header {
+    height: 60px;
+    padding: 0 16px;
+    justify-content: space-between;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+    margin-right: 0;
+  }
+
+  .user-profile {
+    gap: 12px;
+  }
+
+  .user-name, .role-badge {
+    display: none !important;
+  }
+
+  .logout-btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  .dashboard-container {
+    padding: 20px 16px;
+  }
+
+  .dashboard-grid {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .dashboard-grid .module-card {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .module-card, .detail-view {
+    padding: 24px 16px;
+  }
+
+  .lesson-item, .assignment-item {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .lesson-item > div, .assignment-item > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .module-title {
+    font-size: 1.3rem;
+  }
+
+  .modern-assignment-title, .lesson-title {
+    font-size: 1.5rem;
+  }
+
+  .modern-submit-btn, .challenge-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
