@@ -2,6 +2,7 @@ import os
 import shutil
 import io
 import re
+import json
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -248,12 +249,18 @@ def submit_assignment(
     db: Session = Depends(get_db)
 ):
     folder_id = "0AFizHPTVPTjTUk9PVA"
-    cred_file = "credentials.json"
-    if not os.path.exists(cred_file):
-        raise HTTPException(status_code=500, detail="Google Drive credentials not found.")
     
     try:
-        creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if cred_json:
+            creds_info = json.loads(cred_json)
+            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+        else:
+            cred_file = "credentials.json"
+            if not os.path.exists(cred_file):
+                raise HTTPException(status_code=500, detail="Google Drive credentials not found.")
+            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+            
         service = build('drive', 'v3', credentials=creds)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -390,12 +397,17 @@ def delete_file_from_drive(file_url: str):
         return
     file_id = match.group(1)
     
-    cred_file = "credentials.json"
-    if not os.path.exists(cred_file):
-        return
-        
     try:
-        creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if cred_json:
+            creds_info = json.loads(cred_json)
+            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+        else:
+            cred_file = "credentials.json"
+            if not os.path.exists(cred_file):
+                return
+            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+            
         service = build('drive', 'v3', credentials=creds)
         service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
     except Exception as e:
