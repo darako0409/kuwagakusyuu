@@ -1,14 +1,23 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status
+import shutil
+import io
+import re
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String, Text
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.orm import Session
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from pydantic import BaseModel
 from typing import List
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import models
+import schemas
+from database import engine, SessionLocal, get_db
 
 # --- 設定 ---
 # 本番環境では環境変数からキーを取得し、ローカルではデフォルト値を使用
@@ -16,81 +25,56 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-please-change-it")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# --- データベース設定 ---
-# 環境変数 DATABASE_URL があればそれ（Supabase）を使用し、なければローカルのSQLiteを使用する
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
-if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-else:
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
 # --- パスワードハッシュとJWT ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
-# --- データベースモデル ---
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    hashed_password = Column(String) # 元のDBと整合性を取るためhashed_passwordに戻します
-    role = Column(String, default="student")
+# --- ファイル保存用ディレクトリ ---
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-class Material(Base):
-    __tablename__ = "materials"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String)
-    content = Column(Text)
-    type = Column(String)
+models.Base.metadata.create_all(bind=engine)
 
-class Submission(Base):
-    __tablename__ = "submissions"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True) # 提出した生徒のID
-    code = Column(Text) # 書かれたコード
-    output = Column(Text) # 実行結果
-
-Base.metadata.create_all(bind=engine)
-
-# --- スキーマ ---
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    role: str = "student"
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    role: str
-    class Config:
-        from_attributes = True
-
-class MaterialCreate(BaseModel):
-    title: str
-    content: str
-    type: str
-
-class MaterialResponse(BaseModel):
-    id: int
-    title: str
-    content: str
-    type: str
-    class Config:
-        from_attributes = True
-
-class SubmissionCreate(BaseModel):
-    code: str
-    output: str
-
-# --- ユーティリティ関数 ---
-def get_db():
+def init_db():
     db = SessionLocal()
     try:
-        yield db
+        if db.query(models.Lesson).count() == 0:
+            lesson1 = models.Lesson(
+                chapter_id=1,
+                title="第1回：プログラミングの基礎「変数」と「代入」",
+                content="""プログラミングとは、コンピュータに「こう動いてね」というお願い（命令）を書くことです。
+今回は、そのお願いをするための最も大切な仕組みである**「変数（へんすう）」**と**「代入（だいにゅう）」**について学んでいきましょう。
+
+■ 1. 変数（へんすう）とは？
+変数とは、データ（数字や文字）を一時的にしまっておく**「名前のついた箱」**のようなものです。
+
+・箱のルール
+  - 箱には好きな名前（**変数名**）をつけることができます。（例：`age`, `name`, `score` など）
+  - 誰が見ても**「何が入っている箱か」**がわかる名前をつけるのがコツです。
+
+■ 2. 代入（だいにゅう）とは？
+用意した「変数」の箱に、データを入れることを**「代入」**と呼びます。
+プログラミングの世界では、代入に **= （イコール）** の記号を使います。
+
+■ コードを見てみよう
+以下のコードは、`score` という名前の箱に `100` という数字を入れる（代入する）命令です。
+```python
+score = 100
+print(score)
+```""",
+                sort_order=1
+            )
+            db.add(lesson1)
+            db.commit()
+            db.refresh(lesson1)
+            assignment1 = models.Assignment(lesson_id=lesson1.id, title="第1回課題：変数と代入の基本", description="変数 `a` に 10 を代入し、変数 `b` に 20 を代入して、合計を画面に出力してください。")
+            db.add(assignment1)
+            db.commit()
     finally:
         db.close()
 
+init_db()
+
+# --- ユーティリティ関数 ---
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
@@ -116,7 +100,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise credentials_exception
     return user
@@ -132,14 +116,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/api/register", response_model=UserResponse)
-def register(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == user.username).first()
+@app.post("/api/register", response_model=schemas.UserResponse)
+def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    if user.role == "teacher":
+        secret_code = os.getenv("TEACHER_SECRET_CODE", "secret123")
+        if user.teacher_code != secret_code:
+            raise HTTPException(status_code=403, detail="教員用認証コードが正しくありません")
+            
+    db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     
     hashed_pw = get_password_hash(user.password)
-    new_user = User(
+    new_user = models.User(
         username=user.username,
         hashed_password=hashed_pw,
         role=user.role
@@ -151,7 +140,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
+    user = db.query(models.User).filter(models.User.username == form_data.username, models.User.deleted_at == None).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -161,47 +150,325 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/api/users/me", response_model=UserResponse)
-def read_users_me(current_user: User = Depends(get_current_user)):
+@app.get("/api/users/me", response_model=schemas.UserResponse)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+@app.get("/api/users", response_model=List[schemas.UserResponse])
+def get_users(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    return db.query(models.User).filter(models.User.role == "student", models.User.deleted_at == None).all()
 
 @app.get("/api/hello")
 def read_root():
     return {"message": "情報Ⅰ 学習システムAPIへようこそ！バックエンドとの通信に成功しました。"}
 
-@app.post("/api/materials", response_model=MaterialResponse)
-def create_material(material: MaterialCreate, db: Session = Depends(get_db)):
-    new_material = Material(
-        title=material.title,
-        content=material.content,
-        type=material.type
-    )
-    db.add(new_material)
-    db.commit()
-    db.refresh(new_material)
-    return new_material
+@app.get("/api/lessons", response_model=List[schemas.LessonResponse])
+def get_lessons(db: Session = Depends(get_db)):
+    return db.query(models.Lesson).filter(models.Lesson.deleted_at == None).order_by(models.Lesson.sort_order).all()
 
-@app.get("/api/materials", response_model=List[MaterialResponse])
-def get_materials(db: Session = Depends(get_db)):
-    materials = db.query(Material).all()
-    return materials
-
-@app.post("/api/submissions")
-def create_submission(submission: SubmissionCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    new_submission = Submission(
-        user_id=current_user.id,
-        code=submission.code,
-        output=submission.output
-    )
-    db.add(new_submission)
-    db.commit()
-    return {"message": "課題を提出しました！"}
-
-@app.get("/api/submissions")
-def get_submissions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@app.post("/api/lessons", response_model=schemas.LessonResponse)
+def create_lesson(lesson: schemas.LessonCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != "teacher":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="教員権限が必要です")
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    new_lesson = models.Lesson(**lesson.model_dump())
+    db.add(new_lesson)
+    db.commit()
+    db.refresh(new_lesson)
+    return new_lesson
+
+@app.put("/api/lessons/{lesson_id}", response_model=schemas.LessonResponse)
+def update_lesson(lesson_id: int, lesson_update: schemas.LessonCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    lesson = db.query(models.Lesson).filter(models.Lesson.id == lesson_id, models.Lesson.deleted_at == None).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
     
-    # 提出物テーブルとユーザーテーブルを結合(JOIN)し、誰が何を提出したかを取得します
-    submissions = db.query(Submission, User.username).join(User, Submission.user_id == User.id).all()
-    return [{"id": s.id, "user_id": s.user_id, "username": u, "code": s.code, "output": s.output} for s, u in submissions]
+    lesson.title = lesson_update.title
+    lesson.content = lesson_update.content
+    lesson.chapter_id = lesson_update.chapter_id
+    lesson.sort_order = lesson_update.sort_order
+    
+    db.commit()
+    db.refresh(lesson)
+    return lesson
+
+@app.get("/api/assignments", response_model=List[schemas.AssignmentResponse])
+def get_assignments(db: Session = Depends(get_db)):
+    return db.query(models.Assignment).filter(models.Assignment.deleted_at == None).all()
+
+@app.post("/api/assignments", response_model=schemas.AssignmentResponse)
+def create_assignment(
+    title: str = Form(...),
+    description: str = Form(...),
+    lesson_id: int = Form(None),
+    template_code: str = Form(None),
+    file: UploadFile = File(None),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    
+    file_path = None
+    file_name = None
+    if file:
+        file_name = file.filename
+        file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+    new_assignment = models.Assignment(
+        title=title,
+        description=description,
+        lesson_id=lesson_id,
+        template_code=template_code,
+        attachment_filename=file_name,
+        attachment_filepath=file_path
+    )
+    db.add(new_assignment)
+    db.commit()
+    db.refresh(new_assignment)
+    return new_assignment
+
+@app.get("/api/assignments/{assignment_id}/download")
+def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
+    if not assignment or not assignment.attachment_filepath:
+        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+    return FileResponse(assignment.attachment_filepath, filename=assignment.attachment_filename)
+
+@app.post("/api/assignments/{assignment_id}/submit")
+def submit_assignment(
+    assignment_id: int,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    folder_id = "0AFizHPTVPTjTUk9PVA"
+    cred_file = "credentials.json"
+    if not os.path.exists(cred_file):
+        raise HTTPException(status_code=500, detail="Google Drive credentials not found.")
+    
+    try:
+        creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+        service = build('drive', 'v3', credentials=creds)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_username = current_user.username.replace(" ", "_")
+        drive_file_name = f"{safe_username}_{timestamp}_{file.filename}"
+        
+        file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
+        mimetype = file.content_type or "application/octet-stream"
+        
+        file.file.seek(0)
+        file_content = file.file.read()
+        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mimetype, resumable=True)
+        
+        drive_file = service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink',
+            supportsAllDrives=True
+        ).execute()
+        file_url = drive_file.get('webViewLink')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Drive upload failed: {str(e)}")
+
+    existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
+    if existing:
+        existing.status = "提出済"
+        existing.submitted_file_url = file_url
+        existing.submitted_file_name = drive_file_name
+    else:
+        new_progress = models.Progress(user_id=current_user.id, assignment_id=assignment_id, status="提出済", submitted_file_url=file_url, submitted_file_name=drive_file_name)
+        db.add(new_progress)
+    db.commit()
+    return {"message": "提出完了", "url": file_url}
+
+@app.post("/api/progresses")
+def mark_progress(progress: schemas.ProgressCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    existing = db.query(models.Progress).filter(
+        models.Progress.user_id == current_user.id,
+        models.Progress.lesson_id == progress.lesson_id,
+        models.Progress.assignment_id == progress.assignment_id,
+        models.Progress.deleted_at == None
+    ).first()
+    
+    if existing:
+        existing.status = progress.status
+        if progress.saved_code:
+            existing.saved_code = progress.saved_code
+    else:
+        new_progress = models.Progress(
+            user_id=current_user.id,
+            lesson_id=progress.lesson_id,
+            assignment_id=progress.assignment_id,
+            status=progress.status,
+            saved_code=progress.saved_code
+        )
+        db.add(new_progress)
+    db.commit()
+    return {"message": "進捗を記録しました"}
+
+@app.get("/api/progresses")
+def get_all_progress(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    query = db.query(models.Progress, models.User.username, models.Lesson.title.label("lesson_title"), models.Assignment.title.label("assignment_title"))\
+        .join(models.User, models.Progress.user_id == models.User.id)\
+        .outerjoin(models.Lesson, models.Progress.lesson_id == models.Lesson.id)\
+        .outerjoin(models.Assignment, models.Progress.assignment_id == models.Assignment.id)\
+        .filter(models.Progress.deleted_at == None)
+
+    if current_user.role != "teacher":
+        query = query.filter(models.Progress.user_id == current_user.id)
+
+    progresses = query.all()
+    
+    result = []
+    for p, uname, l_title, a_title in progresses:
+        result.append({
+            "id": p.id,
+            "username": uname,
+            "item_title": l_title if l_title else a_title,
+            "type": "授業資料" if l_title else "課題",
+            "status": p.status,
+            "updated_at": p.updated_at,
+            "saved_code": p.saved_code,
+            "submitted_file_url": p.submitted_file_url,
+            "submitted_file_name": p.submitted_file_name
+        })
+    return result
+
+@app.delete("/api/lessons/{lesson_id}")
+def delete_lesson(lesson_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    lesson = db.query(models.Lesson).get(lesson_id)
+    if lesson:
+        lesson.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"message": "deleted"}
+
+@app.delete("/api/assignments/{assignment_id}")
+def delete_assignment(assignment_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    assignment = db.query(models.Assignment).get(assignment_id)
+    if assignment:
+        assignment.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"message": "deleted"}
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    user = db.query(models.User).get(user_id)
+    if user:
+        user.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"message": "deleted"}
+
+@app.delete("/api/progresses/{progress_id}")
+def delete_progress(progress_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    progress = db.query(models.Progress).get(progress_id)
+    if progress:
+        if current_user.role != "teacher" and progress.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="他人の進捗は削除できません")
+        progress.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"message": "deleted"}
+
+def delete_file_from_drive(file_url: str):
+    if not file_url:
+        return
+    # URLからGoogle DriveのファイルIDを抽出
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
+    if not match:
+        return
+    file_id = match.group(1)
+    
+    cred_file = "credentials.json"
+    if not os.path.exists(cred_file):
+        return
+        
+    try:
+        creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+        service = build('drive', 'v3', credentials=creds)
+        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+    except Exception as e:
+        print(f"Failed to delete file from Drive: {e}")
+
+def cleanup_trash(db: Session):
+    threshold = datetime.now(timezone.utc) - timedelta(days=30)
+    
+    # 30日経過した提出履歴を物理削除する前に、Drive上のファイルも削除する
+    old_progresses = db.query(models.Progress).filter(models.Progress.deleted_at < threshold).all()
+    for p in old_progresses:
+        if p.submitted_file_url:
+            delete_file_from_drive(p.submitted_file_url)
+            
+    db.query(models.Progress).filter(models.Progress.deleted_at < threshold).delete(synchronize_session=False)
+    db.query(models.Assignment).filter(models.Assignment.deleted_at < threshold).delete(synchronize_session=False)
+    db.query(models.Lesson).filter(models.Lesson.deleted_at < threshold).delete(synchronize_session=False)
+    db.query(models.User).filter(models.User.deleted_at < threshold).delete(synchronize_session=False)
+    db.commit()
+
+@app.get("/api/trash")
+def get_trash(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    cleanup_trash(db)
+    
+    users = db.query(models.User).filter(models.User.deleted_at != None).all()
+    lessons = db.query(models.Lesson).filter(models.Lesson.deleted_at != None).all()
+    assignments = db.query(models.Assignment).filter(models.Assignment.deleted_at != None).all()
+    
+    progresses = db.query(models.Progress, models.User.username, models.Lesson.title.label("lesson_title"), models.Assignment.title.label("assignment_title"))\
+        .join(models.User, models.Progress.user_id == models.User.id)\
+        .outerjoin(models.Lesson, models.Progress.lesson_id == models.Lesson.id)\
+        .outerjoin(models.Assignment, models.Progress.assignment_id == models.Assignment.id)\
+        .filter(models.Progress.deleted_at != None).all()
+        
+    return {
+        "users": [{"id": u.id, "username": u.username, "deleted_at": u.deleted_at} for u in users],
+        "lessons": [{"id": l.id, "title": l.title, "deleted_at": l.deleted_at} for l in lessons],
+        "assignments": [{"id": a.id, "title": a.title, "deleted_at": a.deleted_at} for a in assignments],
+        "progresses": [{"id": p.id, "username": uname, "item_title": l_title or a_title, "type": "授業資料" if l_title else "課題", "deleted_at": p.deleted_at} for p, uname, l_title, a_title in progresses]
+    }
+
+@app.post("/api/trash/restore/{item_type}/{item_id}")
+def restore_trash(item_type: str, item_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    item = None
+    if item_type == "user": item = db.query(models.User).get(item_id)
+    elif item_type == "lesson": item = db.query(models.Lesson).get(item_id)
+    elif item_type == "assignment": item = db.query(models.Assignment).get(item_id)
+    elif item_type == "progress": item = db.query(models.Progress).get(item_id)
+    
+    if item:
+        item.deleted_at = None
+        db.commit()
+    return {"message": "restored"}
+
+@app.delete("/api/trash/{item_type}/{item_id}")
+def delete_trash_permanently(item_type: str, item_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+    item = None
+    if item_type == "user": item = db.query(models.User).get(item_id)
+    elif item_type == "lesson": item = db.query(models.Lesson).get(item_id)
+    elif item_type == "assignment": item = db.query(models.Assignment).get(item_id)
+    elif item_type == "progress": item = db.query(models.Progress).get(item_id)
+    
+    if item and item.deleted_at is not None:
+        # 手動で「完全に削除」した場合も、Drive上のファイルを削除する
+        if item_type == "progress" and getattr(item, "submitted_file_url", None):
+            delete_file_from_drive(item.submitted_file_url)
+            
+        db.delete(item)
+        db.commit()
+    return {"message": "permanently deleted"}

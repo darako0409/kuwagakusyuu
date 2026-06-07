@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import './Login.css';
 
 function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -8,6 +9,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isTeacher, setIsTeacher] = useState(false);
+  const [teacherCode, setTeacherCode] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -29,13 +31,19 @@ function Login() {
         navigate('/dashboard'); // 成功したらダッシュボードへ
       } else {
         // 新規登録処理
+        if (isTeacher && !teacherCode.trim()) {
+          setMessage('教員用認証コードを入力してください。');
+          return;
+        }
         await axios.post(`${apiUrl}/register`, {
           username: username,
           password: password,
-          role: isTeacher ? 'teacher' : 'student'
+          role: isTeacher ? 'teacher' : 'student',
+          teacher_code: isTeacher ? teacherCode.trim() : undefined
         });
         setMessage('登録が完了しました。ログインしてください。');
         setIsLogin(true);
+        setTeacherCode('');
       }
     } catch (error) {
       if (error.response && error.response.data) {
@@ -47,50 +55,67 @@ function Login() {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>{isLogin ? 'ログイン' : '新規登録'}</h2>
-      {message && <p style={{ color: 'red' }}>{message}</p>}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <div>
-          <label>ユーザー名:</label><br />
+    <div className="login-container">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="login-brand-icon">🐍</span>
+          <span className="login-brand-text">Kuwaga学習サイト</span>
+        </div>
+        <h2 className="login-title">{isLogin ? 'ログイン' : '新規アカウント作成'}</h2>
+        {message && <div className={`message ${message.includes('成功') || message.includes('完了') ? 'success' : 'error'}`}>{message}</div>}
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="form-group">
+            <label>ユーザーID</label>
           <input 
             type="text" 
             value={username} 
             onChange={(e) => setUsername(e.target.value)} 
             required 
-            style={{ width: '100%', padding: '8px' }}
+              className="form-input"
+              placeholder="学籍番号やIDを入力"
           />
         </div>
-        <div>
-          <label>パスワード:</label><br />
+          <div className="form-group">
+            <label>パスワード</label>
           <input 
             type="password" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             required 
-            style={{ width: '100%', padding: '8px' }}
+              className="form-input"
+              placeholder="パスワードを入力"
           />
         </div>
         {!isLogin && (
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={isTeacher} onChange={(e) => setIsTeacher(e.target.checked)} />
+          <>
+            <label className="checkbox-group">
+              <input type="checkbox" checked={isTeacher} onChange={(e) => { setIsTeacher(e.target.checked); setMessage(''); }} />
               教員アカウントとして登録する
             </label>
-          </div>
+            {isTeacher && (
+              <div className="form-group teacher-code-group">
+                <label>教員用認証コード</label>
+                <input 
+                  type="password" 
+                  value={teacherCode} 
+                  onChange={(e) => setTeacherCode(e.target.value)} 
+                  className="form-input"
+                  placeholder="学校から配布されたコードを入力"
+                />
+              </div>
+            )}
+          </>
         )}
-        <button type="submit" style={{ padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          <button type="submit" className="submit-btn">
           {isLogin ? 'ログイン' : '登録'}
         </button>
       </form>
-      <p style={{ marginTop: '20px', textAlign: 'center' }}>
-        <button 
-          onClick={() => { setIsLogin(!isLogin); setMessage(''); }} 
-          style={{ background: 'none', border: 'none', color: '#007bff', textDecoration: 'underline', cursor: 'pointer' }}
-        >
-          {isLogin ? '新規登録はこちら' : 'ログイン画面に戻る'}
-        </button>
-      </p>
+        <div className="toggle-mode-container">
+          <button onClick={() => { setIsLogin(!isLogin); setMessage(''); }} className="toggle-mode-btn">
+            {isLogin ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方はこちら'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

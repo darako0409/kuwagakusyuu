@@ -1,0 +1,154 @@
+.python-runner-container {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  margin-top: 20px;
+}
+
+.runner-title {
+  margin-top: 0;
+  color: #0f172a;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.editor-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.editor-section label,
+.console-section label {
+  display: block;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 10px;
+}
+
+.code-textarea {
+  width: 100%;
+  height: 200px;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+  padding: 16px;
+  font-size: 1rem;
+  line-height: 1.5;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  color: #0f172a;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.code-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background-color: #ffffff;
+}
+
+.action-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-run { background-color: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+.btn-run:hover { background-color: #059669; }
+
+.btn-submit { background-color: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+.btn-submit:hover { background-color: #2563eb; }
+
+.btn-hint { background-color: #f59e0b; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+.btn-hint:hover:not(:disabled) { background-color: #d97706; }
+.btn-hint:disabled { background-color: #cbd5e1; cursor: not-allowed; }
+
+.submit-msg { font-weight: bold; padding: 8px 16px; border-radius: 8px; }
+.submit-msg.success { background-color: #dcfce7; color: #16a34a; }
+.submit-msg.error { background-color: #fee2e2; color: #dc2626; }
+
+.hint-box {
+  background-color: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  padding: 20px;
+  border-radius: 0 8px 8px 0;
+  color: #92400e;
+}
+
+.hint-box ul { margin: 12px 0 0 0; padding-left: 24px; }
+.hint-box li { margin-bottom: 8px; line-height: 1.5; }
+
+.console-output {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 20px;
+  border-radius: 8px;
+  min-height: 120px;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+  margin: 0;
+  line-height: 1.5;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  color: #64748b;
+  font-style: italic;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+/* --- ダークモード対応 --- */
+.dark-mode .python-runner-container {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.dark-mode .runner-title {
+  color: #f8fafc;
+}
+
+.dark-mode .editor-section label,
+.dark-mode .console-section label {
+  color: #cbd5e1;
+}
+
+.dark-mode .code-textarea {
+  background-color: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.dark-mode .code-textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dark-mode .hint-box {
+  background-color: #451a03;
+  border-left-color: #d97706;
+  color: #fef3c7;
+}
+
+.dark-mode .loading-state {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.dark-mode .console-output {
+  background-color: #000000;
+  box-shadow: inset 0 2px 4px rgba(255,255,255,0.05);
+}
