@@ -10,6 +10,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/:tab" element={<Dashboard />} />
+        <Route path="/dashboard/:tab/:itemId" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   );
