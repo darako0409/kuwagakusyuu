@@ -348,7 +348,10 @@ def submit_assignment(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    folder_id = "0AFizHPTVPTjTUk9PVA"
+    # 環境変数からフォルダIDを取得（設定されていない場合はデフォルトのIDを使用）
+    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "0AFizHPTVPTjTUk9PVA")
+    if not folder_id:
+        raise HTTPException(status_code=500, detail="Google Driveの保存先フォルダIDが設定されていません。")
     
     try:
         cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
@@ -392,7 +395,12 @@ def submit_assignment(
     except HTTPException:
         raise # JSON解析エラーなどはそのままフロントエンドに返す
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Drive upload failed: {str(e)}")
+        error_str = str(e)
+        print(f"Drive upload failed: {error_str}") # RenderのLog用
+        if "File not found" in error_str:
+            raise HTTPException(status_code=500, detail=f"保存先フォルダ（ID: {folder_id}）が見つかりません。Renderの GOOGLE_DRIVE_FOLDER_ID 環境変数と、フォルダの共有設定（サービスアカウントへの権限付与）を確認してください。")
+        else:
+            raise HTTPException(status_code=500, detail=f"Google Driveへのアップロードに失敗しました: {error_str}")
 
     existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
     if existing:
