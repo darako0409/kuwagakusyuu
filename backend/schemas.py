@@ -47,6 +47,7 @@ class AssignmentCreate(AssignmentBase):
 class AssignmentResponse(AssignmentBase):
     id: int
     attachment_filename: Optional[str] = None
+    attachments: Optional[List[dict]] = None
     class Config:
         from_attributes = True
 

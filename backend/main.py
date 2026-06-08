@@ -231,40 +231,115 @@ def create_assignment(
     description: str = Form(...),
     lesson_id: int = Form(None),
     template_code: str = Form(None),
-    file: UploadFile = File(None),
+    files: List[UploadFile] = File(None),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="教員権限が必要です")
     
-    file_path = None
-    file_name = None
-    if file:
-        file_name = file.filename
-        file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
+    file_names = []
+    file_paths = []
+    if files:
+        for file in files:
+            if file.filename:
+                file_name = file.filename
+                file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                file_names.append(file_name)
+                file_paths.append(file_path)
+
+    attachment_filename = json.dumps(file_names) if file_names else None
+    attachment_filepath = json.dumps(file_paths) if file_paths else None
+
     new_assignment = models.Assignment(
         title=title,
         description=description,
         lesson_id=lesson_id,
         template_code=template_code,
-        attachment_filename=file_name,
-        attachment_filepath=file_path
+        attachment_filename=attachment_filename,
+        attachment_filepath=attachment_filepath
     )
     db.add(new_assignment)
     db.commit()
     db.refresh(new_assignment)
     return new_assignment
 
+@app.put("/api/assignments/{assignment_id}", response_model=schemas.AssignmentResponse)
+def update_assignment(
+    assignment_id: int,
+    title: str = Form(...),
+    description: str = Form(...),
+    files: List[UploadFile] = File(None),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="教員権限が必要です")
+        
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id, models.Assignment.deleted_at == None).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+        
+    assignment.title = title
+    assignment.description = description
+    
+    # 新しいファイルがアップロードされた場合のみ上書きする
+    if files and len(files) > 0 and files[0].filename:
+        file_names = []
+        file_paths = []
+        for file in files:
+            if file.filename:
+                file_name = file.filename
+                file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                file_names.append(file_name)
+                file_paths.append(file_path)
+        assignment.attachment_filename = json.dumps(file_names)
+        assignment.attachment_filepath = json.dumps(file_paths)
+        
+    db.commit()
+    db.refresh(assignment)
+    return assignment
+
 @app.get("/api/assignments/{assignment_id}/download")
 def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
     assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
     if not assignment or not assignment.attachment_filepath:
         raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+        
+    try:
+        # 古いバージョンのUI向け: 複数ファイルの場合はとりあえず最初の1つを返す
+        filepaths = json.loads(assignment.attachment_filepath)
+        filenames = json.loads(assignment.attachment_filename)
+        if isinstance(filepaths, list) and len(filepaths) > 0:
+            return FileResponse(filepaths[0], filename=filenames[0])
+    except json.JSONDecodeError:
+        pass
+        
     return FileResponse(assignment.attachment_filepath, filename=assignment.attachment_filename)
+
+@app.get("/api/assignments/{assignment_id}/download/{file_index}")
+def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Session = Depends(get_db)):
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
+    if not assignment or not assignment.attachment_filepath:
+        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+        
+    try:
+        filepaths = json.loads(assignment.attachment_filepath)
+        filenames = json.loads(assignment.attachment_filename)
+        if isinstance(filepaths, list) and len(filepaths) > file_index:
+            return FileResponse(filepaths[file_index], filename=filenames[file_index])
+        else:
+            raise HTTPException(status_code=404, detail="ファイルインデックスが不正です")
+    except json.JSONDecodeError:
+        # 過去の単一ファイル保存のデータだった場合のフォールバック
+        if file_index == 0:
+            return FileResponse(assignment.attachment_filepath, filename=assignment.attachment_filename)
+        else:
+            raise HTTPException(status_code=404, detail="ファイルインデックスが不正です")
 
 @app.post("/api/assignments/{assignment_id}/submit")
 def submit_assignment(

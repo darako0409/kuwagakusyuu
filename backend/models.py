@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone
+import json
 
 class User(Base):
     __tablename__ = "users"
@@ -40,6 +41,18 @@ class Assignment(Base):
 
     lesson = relationship("Lesson", back_populates="assignments")
     progresses = relationship("Progress", back_populates="assignment")
+
+    @property
+    def attachments(self):
+        if not self.attachment_filename:
+            return []
+        try:
+            filenames = json.loads(self.attachment_filename)
+            if isinstance(filenames, list):
+                return [{"id": i, "filename": name} for i, name in enumerate(filenames)]
+        except json.JSONDecodeError:
+            pass
+        return [{"id": 0, "filename": self.attachment_filename}]
 
 class Progress(Base):
     __tablename__ = "progresses"
