@@ -20,7 +20,7 @@ function Dashboard() {
   const [newAssignment, setNewAssignment] = useState({ title: '', description: '', lesson_id: '', template_code: '', files: [] });
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
   const [editingAssignmentData, setEditingAssignmentData] = useState({ title: '', description: '', files: [] });
-  const [submitFile, setSubmitFile] = useState(null);
+  const [submitFiles, setSubmitFiles] = useState([]);
   const [selectedSubmitAssignment, setSelectedSubmitAssignment] = useState('');
   const [trashData, setTrashData] = useState(null); // ゴミ箱のデータ
   const navigate = useNavigate();
@@ -278,15 +278,23 @@ function Dashboard() {
     fetchData();
   }, [navigate]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file && file.size > 3 * 1024 * 1024) {
-      showToast("ファイルサイズは3MB以下にしてください。", 'error');
-      e.target.value = "";
-      setSubmitFile(null);
-    } else {
-      setSubmitFile(file);
+  const handleSubmitFileSelect = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      const validFiles = selected.filter(f => {
+        if (f.size > 3 * 1024 * 1024) {
+          showToast(`${f.name} は3MB以下にしてください。`, 'error');
+          return false;
+        }
+        return true;
+      });
+      setSubmitFiles(prev => [...prev, ...validFiles]);
     }
+    e.target.value = '';
+  };
+  
+  const handleRemoveSubmitFile = (index) => {
+    setSubmitFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   // --- 各種削除・復元処理 ---
@@ -349,13 +357,13 @@ function Dashboard() {
       showToast("提出する課題を選択してください。", 'error');
       return;
     }
-    if (!submitFile) {
+    if (submitFiles.length === 0) {
       showToast("提出するファイルを選択してください。", 'error');
       return;
     }
     const token = localStorage.getItem('token');
     const formData = new FormData();
-    formData.append('file', submitFile);
+    submitFiles.forEach(file => formData.append('files', file));
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
@@ -366,7 +374,7 @@ function Dashboard() {
       if (activeTab === 'assignments') {
         navigate('/dashboard/home');
       }
-      setSubmitFile(null);
+      setSubmitFiles([]);
       setSelectedSubmitAssignment('');
       fetchProgresses(); // 進捗を再取得して最新状態を反映
     } catch(e) {
@@ -965,9 +973,19 @@ function Dashboard() {
                         </div>
                         
                         <div className="form-group" style={{ marginTop: '20px' }}>
-                          <label>提出ファイル (最大3MB)</label>
-                          <div className="file-upload-area">
-                            <input type="file" onChange={handleFileChange} style={{ width: '100%', fontSize: '0.95rem' }} />
+                          <label>提出ファイル (複数選択可・各最大3MB)</label>
+                          <div className="file-upload-area" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <input type="file" multiple onChange={handleSubmitFileSelect} style={{ width: '100%', fontSize: '0.95rem' }} />
+                            {submitFiles.length > 0 && (
+                              <ul style={{ listStyle: 'none', padding: 0, margin: 0, border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
+                                {submitFiles.map((f, idx) => (
+                                  <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '4px 0', borderBottom: idx < submitFiles.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📄 {f.name}</span>
+                                    <button type="button" onClick={() => handleRemoveSubmitFile(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', flexShrink: 0 }}>✕ 削除</button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         </div>
                         
@@ -976,7 +994,7 @@ function Dashboard() {
                             onClick={() => handleAssignmentSubmit(selectedSubmitAssignment)} 
                             className="modern-submit-btn" 
                             style={{ width: '100%', justifyContent: 'center' }}
-                            disabled={!selectedSubmitAssignment || !submitFile}
+                            disabled={!selectedSubmitAssignment || submitFiles.length === 0}
                           >
                             ファイルをアップロードして提出
                           </button>
@@ -1010,9 +1028,19 @@ function Dashboard() {
                                 <td><span className="status-badge matrix-badge-done">{p.status}</span></td>
                                 <td>{new Date(p.updated_at).toLocaleString('ja-JP')}</td>
                                 <td>
-                                  {p.submitted_file_url ? (
-                                    <a href={p.submitted_file_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>{p.submitted_file_name || 'ファイルを見る'}</a>
-                                  ) : <span style={{ color: '#94a3b8' }}>ファイルなし</span>}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {p.submitted_file_urls && p.submitted_file_urls.length > 0 ? (
+                                      p.submitted_file_urls.map((url, i) => (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
+                                          {p.submitted_file_names && p.submitted_file_names[i] ? p.submitted_file_names[i] : `ファイル ${i + 1}`}
+                                        </a>
+                                      ))
+                                    ) : p.submitted_file_url ? (
+                                      <a href={p.submitted_file_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
+                                        {p.submitted_file_name || 'ファイルを見る'}
+                                      </a>
+                                    ) : <span style={{ color: '#94a3b8' }}>ファイルなし</span>}
+                                  </div>
                                 </td>
                                 <td style={{ textAlign: 'center' }}>
                                   <button onClick={() => handleDelete('progresses', p.id)} className="icon-btn delete-btn" title="提出を削除">🗑️</button>

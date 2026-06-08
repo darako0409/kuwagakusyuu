@@ -344,7 +344,7 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
 @app.post("/api/assignments/{assignment_id}/submit")
 def submit_assignment(
     assignment_id: int,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -377,24 +377,33 @@ def submit_assignment(
             
         service = build('drive', 'v3', credentials=creds)
         
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_username = current_user.username.replace(" ", "_")
-        drive_file_name = f"{safe_username}_{timestamp}_{file.filename}"
+        file_urls = []
+        file_names = []
         
-        file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
-        mimetype = file.content_type or "application/octet-stream"
-        
-        file.file.seek(0)
-        file_content = file.file.read()
-        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mimetype, resumable=True)
-        
-        drive_file = service.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields='id, webViewLink',
-            supportsAllDrives=True
-        ).execute()
-        file_url = drive_file.get('webViewLink')
+        for file in files:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_username = current_user.username.replace(" ", "_")
+            drive_file_name = f"{safe_username}_{timestamp}_{file.filename}"
+            
+            file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
+            mimetype = file.content_type or "application/octet-stream"
+            
+            file.file.seek(0)
+            file_content = file.file.read()
+            media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mimetype, resumable=True)
+            
+            drive_file = service.files().create(
+                body=file_metadata, 
+                media_body=media, 
+                fields='id, webViewLink',
+                supportsAllDrives=True
+            ).execute()
+            
+            file_urls.append(drive_file.get('webViewLink'))
+            file_names.append(drive_file_name)
+            
+        url_str = json.dumps(file_urls)
+        name_str = json.dumps(file_names)
     except HTTPException:
         raise # JSON解析エラーなどはそのままフロントエンドに返す
     except Exception as e:
@@ -408,13 +417,13 @@ def submit_assignment(
     existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
     if existing:
         existing.status = "提出済"
-        existing.submitted_file_url = file_url
-        existing.submitted_file_name = drive_file_name
+        existing.submitted_file_url = url_str
+        existing.submitted_file_name = name_str
     else:
-        new_progress = models.Progress(user_id=current_user.id, assignment_id=assignment_id, status="提出済", submitted_file_url=file_url, submitted_file_name=drive_file_name)
+        new_progress = models.Progress(user_id=current_user.id, assignment_id=assignment_id, status="提出済", submitted_file_url=url_str, submitted_file_name=name_str)
         db.add(new_progress)
     db.commit()
-    return {"message": "提出完了", "url": file_url}
+    return {"message": "提出完了", "urls": file_urls}
 
 @app.post("/api/progresses")
 def mark_progress(progress: schemas.ProgressCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -456,6 +465,21 @@ def get_all_progress(current_user: models.User = Depends(get_current_user), db: 
     
     result = []
     for p, uname, l_title, a_title in progresses:
+        urls = []
+        names = []
+        try:
+            parsed_urls = json.loads(p.submitted_file_url) if p.submitted_file_url else []
+            parsed_names = json.loads(p.submitted_file_name) if p.submitted_file_name else []
+            if isinstance(parsed_urls, list):
+                urls = parsed_urls
+                names = parsed_names
+            else:
+                urls = [p.submitted_file_url] if p.submitted_file_url else []
+                names = [p.submitted_file_name] if p.submitted_file_name else []
+        except (json.JSONDecodeError, TypeError):
+            urls = [p.submitted_file_url] if p.submitted_file_url else []
+            names = [p.submitted_file_name] if p.submitted_file_name else []
+
         result.append({
             "id": p.id,
             "username": uname,
@@ -465,7 +489,9 @@ def get_all_progress(current_user: models.User = Depends(get_current_user), db: 
             "updated_at": p.updated_at,
             "saved_code": p.saved_code,
             "submitted_file_url": p.submitted_file_url,
-            "submitted_file_name": p.submitted_file_name
+            "submitted_file_name": p.submitted_file_name,
+            "submitted_file_urls": urls,
+            "submitted_file_names": names
         })
     return result
 
@@ -512,12 +538,20 @@ def delete_progress(progress_id: int, current_user: models.User = Depends(get_cu
 def delete_file_from_drive(file_url: str):
     if not file_url:
         return
-    # URLからGoogle DriveのファイルIDを抽出
-    match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
-    if not match:
-        return
-    file_id = match.group(1)
     
+    urls_to_delete = []
+    try:
+        parsed = json.loads(file_url)
+        if isinstance(parsed, list):
+            urls_to_delete = parsed
+        else:
+            urls_to_delete = [file_url]
+    except (json.JSONDecodeError, TypeError):
+        urls_to_delete = [file_url]
+        
+    if not urls_to_delete:
+        return
+
     try:
         cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
         if cred_json:
@@ -537,7 +571,12 @@ def delete_file_from_drive(file_url: str):
             creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
             
         service = build('drive', 'v3', credentials=creds)
-        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        for url in urls_to_delete:
+            match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+            if not match:
+                continue
+            file_id = match.group(1)
+            service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
     except Exception as e:
         print(f"Failed to delete file from Drive: {e}")
 
