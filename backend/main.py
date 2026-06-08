@@ -328,11 +328,19 @@ def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
         filepaths = json.loads(assignment.attachment_filepath)
         filenames = json.loads(assignment.attachment_filename)
         if isinstance(filepaths, list) and len(filepaths) > 0:
-            return FileResponse(filepaths[0], filename=filenames[0])
+            path = filepaths[0]
+            if not os.path.exists(path):
+                # Render等の環境でファイルが消失した場合のエラーハンドリング
+                raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
+            return FileResponse(path, filename=filenames[0])
     except json.JSONDecodeError:
         pass
         
-    return FileResponse(assignment.attachment_filepath, filename=assignment.attachment_filename)
+    path = assignment.attachment_filepath
+    if not os.path.exists(path):
+        # Render等の環境でファイルが消失した場合のエラーハンドリング
+        raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
+    return FileResponse(path, filename=assignment.attachment_filename)
 
 @app.get("/api/assignments/{assignment_id}/download/{file_index}")
 def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Session = Depends(get_db)):
@@ -344,13 +352,21 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
         filepaths = json.loads(assignment.attachment_filepath)
         filenames = json.loads(assignment.attachment_filename)
         if isinstance(filepaths, list) and len(filepaths) > file_index:
-            return FileResponse(filepaths[file_index], filename=filenames[file_index])
+            path = filepaths[file_index]
+            if not os.path.exists(path):
+                # Render等の環境でファイルが消失した場合のエラーハンドリング
+                raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
+            return FileResponse(path, filename=filenames[file_index])
         else:
             raise HTTPException(status_code=404, detail="ファイルインデックスが不正です")
     except json.JSONDecodeError:
         # 過去の単一ファイル保存のデータだった場合のフォールバック
         if file_index == 0:
-            return FileResponse(assignment.attachment_filepath, filename=assignment.attachment_filename)
+            path = assignment.attachment_filepath
+            if not os.path.exists(path):
+                # Render等の環境でファイルが消失した場合のエラーハンドリング
+                raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
+            return FileResponse(path, filename=assignment.attachment_filename)
         else:
             raise HTTPException(status_code=404, detail="ファイルインデックスが不正です")
 
