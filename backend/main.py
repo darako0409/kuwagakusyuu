@@ -142,6 +142,10 @@ app = FastAPI()
 # 未知のクラッシュが起きた際、詳細なエラー文を強制的にフロントエンドへ返す
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # FastAPIの正常なエラー（404 NotFound や 401 Unauthorized など）は上書きせずにそのまま返す
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        
     return JSONResponse(
         status_code=500,
         content={"detail": f"サーバー内部エラー（開発者向け詳細）: {str(exc)}"}
