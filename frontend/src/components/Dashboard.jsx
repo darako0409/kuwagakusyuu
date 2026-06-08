@@ -747,9 +747,6 @@ function Dashboard() {
                         <textarea value={editingAssignmentData.description} onChange={e => setEditingAssignmentData({...editingAssignmentData, description: e.target.value})} required style={{ minHeight: '200px' }}></textarea>
                       </div>
                       <div className="form-group">
-                        <label>追加ファイル（複数選択可）</label>
-                        <input type="file" multiple onChange={e => setEditingAssignmentData({...editingAssignmentData, files: Array.from(e.target.files)})} />
-                        <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '4px'}}>※新たにファイルを選択すると追加・更新されます。</p>
                     <label>追加ファイル（複数選択可・順次追加できます）</label>
                     <input type="file" multiple onChange={handleFileSelectForEdit} />
                     {editingAssignmentData.files && editingAssignmentData.files.length > 0 && (
@@ -925,8 +922,6 @@ function Dashboard() {
                         <textarea value={newAssignment.description} onChange={e => setNewAssignment({...newAssignment, description: e.target.value})} required placeholder="課題の指示や問題文を入力..."></textarea>
                       </div>
                       <div className="form-group">
-                        <label>配布ファイル（複数選択可・任意）</label>
-                        <input type="file" multiple onChange={e => setNewAssignment({...newAssignment, files: Array.from(e.target.files)})} />
                     <label>配布ファイル（複数選択可・順次追加できます）</label>
                     <input type="file" multiple onChange={handleFileSelectForNew} />
                     {newAssignment.files && newAssignment.files.length > 0 && (
