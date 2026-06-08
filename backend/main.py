@@ -4,8 +4,7 @@ import io
 import re
 import json
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Request
-from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -136,6 +135,122 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
+# --- Google Drive 操作用共通関数 ---
+def delete_file_from_drive(file_url: str):
+    if not file_url:
+        return
+    
+    urls_to_delete = []
+    try:
+        parsed = json.loads(file_url)
+        if isinstance(parsed, list):
+            urls_to_delete = parsed
+        else:
+            urls_to_delete = [file_url]
+    except (json.JSONDecodeError, TypeError):
+        urls_to_delete = [file_url]
+        
+    if not urls_to_delete:
+        return
+
+    try:
+        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if cred_json:
+            try:
+                cred_json = cred_json.strip().strip("'").strip('"')
+                if not cred_json.strip():
+                    return
+                creds_info = json.loads(cred_json, strict=False)
+            except json.JSONDecodeError:
+                try:
+                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
+                    creds_info = json.loads(cred_json_escaped, strict=False)
+                except json.JSONDecodeError:
+                    return
+            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+        else:
+            cred_file = "credentials.json"
+            if not os.path.exists(cred_file):
+                return
+            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+            
+        service = build('drive', 'v3', credentials=creds)
+        for url in urls_to_delete:
+            match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+            if not match:
+                continue
+            file_id = match.group(1)
+            service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+    except Exception as e:
+        print(f"Failed to delete file from Drive: {e}")
+
+def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[List[str], List[str]]:
+    if not files or len(files) == 0 or not files[0].filename:
+        return [], []
+        
+    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "0AFizHPTVPTjTUk9PVA")
+    if not folder_id:
+        raise HTTPException(status_code=500, detail="Google Driveの保存先フォルダIDが設定されていません。")
+    
+    try:
+        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if cred_json:
+            cred_json = cred_json.strip().strip("'").strip('"')
+            if not cred_json.strip():
+                raise HTTPException(status_code=500, detail="Google Drive認証情報が空になっています。")
+            try:
+                creds_info = json.loads(cred_json, strict=False)
+            except json.JSONDecodeError:
+                try:
+                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
+                    creds_info = json.loads(cred_json_escaped, strict=False)
+                except json.JSONDecodeError as e:
+                    raise HTTPException(status_code=500, detail=f"Google Drive認証情報のフォーマットが不正です: {str(e)}")
+            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+        else:
+            cred_file = "credentials.json"
+            if not os.path.exists(cred_file):
+                raise HTTPException(status_code=500, detail="Google Drive credentials not found.")
+            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
+            
+        service = build('drive', 'v3', credentials=creds)
+        
+        file_urls = []
+        file_names = []
+        
+        for file in files:
+            if file.filename:
+                timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
+                drive_file_name = f"{prefix}_{timestamp}_{file.filename}"
+                
+                file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
+                mimetype = file.content_type or "application/octet-stream"
+                
+                file.file.seek(0)
+                file_content = file.file.read()
+                media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mimetype, resumable=True)
+                
+                drive_file = service.files().create(
+                    body=file_metadata, 
+                    media_body=media, 
+                    fields='id, webViewLink',
+                    supportsAllDrives=True
+                ).execute()
+                
+                file_urls.append(drive_file.get('webViewLink'))
+                file_names.append(drive_file_name)
+                
+        return file_urls, file_names
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_str = str(e)
+        print(f"Drive upload failed: {error_str}")
+        if "File not found" in error_str:
+            raise HTTPException(status_code=500, detail=f"保存先フォルダ（ID: {folder_id}）が見つかりません。")
+        else:
+            raise HTTPException(status_code=500, detail=f"Google Driveへのアップロードに失敗しました: {error_str}")
+
 # --- FastAPI アプリケーション ---
 app = FastAPI()
 
@@ -255,20 +370,10 @@ def create_assignment(
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="教員権限が必要です")
     
-    file_names = []
-    file_paths = []
-    if files:
-        for file in files:
-            if file.filename:
-                file_name = file.filename
-                file_path = os.path.join(UPLOAD_DIR, f"{get_jst_now().timestamp()}_{file_name}")
-                with open(file_path, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
-                file_names.append(file_name)
-                file_paths.append(file_path)
+    file_urls, file_names = upload_files_to_drive(files, "Teacher")
 
     attachment_filename = json.dumps(file_names) if file_names else None
-    attachment_filepath = json.dumps(file_paths) if file_paths else None
+    attachment_filepath = json.dumps(file_urls) if file_urls else None
 
     new_assignment = models.Assignment(
         title=title,
@@ -304,18 +409,13 @@ def update_assignment(
     
     # 新しいファイルがアップロードされた場合のみ上書きする
     if files and len(files) > 0 and files[0].filename:
-        file_names = []
-        file_paths = []
-        for file in files:
-            if file.filename:
-                file_name = file.filename
-                file_path = os.path.join(UPLOAD_DIR, f"{get_jst_now().timestamp()}_{file_name}")
-                with open(file_path, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
-                file_names.append(file_name)
-                file_paths.append(file_path)
-        assignment.attachment_filename = json.dumps(file_names)
-        assignment.attachment_filepath = json.dumps(file_paths)
+        if assignment.attachment_filepath:
+            delete_file_from_drive(assignment.attachment_filepath)
+            
+        file_urls, file_names = upload_files_to_drive(files, "Teacher")
+        if file_urls:
+            assignment.attachment_filename = json.dumps(file_names)
+            assignment.attachment_filepath = json.dumps(file_urls)
         
     db.commit()
     db.refresh(assignment)
@@ -333,16 +433,18 @@ def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
         filenames = json.loads(assignment.attachment_filename)
         if isinstance(filepaths, list) and len(filepaths) > 0:
             path = filepaths[0]
+            if path.startswith("http"):
+                return RedirectResponse(url=path)
             if not os.path.exists(path):
-                # Render等の環境でファイルが消失した場合のエラーハンドリング
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
             return FileResponse(path, filename=filenames[0])
     except json.JSONDecodeError:
         pass
         
     path = assignment.attachment_filepath
+    if path.startswith("http"):
+        return RedirectResponse(url=path)
     if not os.path.exists(path):
-        # Render等の環境でファイルが消失した場合のエラーハンドリング
         raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
     return FileResponse(path, filename=assignment.attachment_filename)
 
@@ -357,8 +459,9 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
         filenames = json.loads(assignment.attachment_filename)
         if isinstance(filepaths, list) and len(filepaths) > file_index:
             path = filepaths[file_index]
+            if path.startswith("http"):
+                return RedirectResponse(url=path)
             if not os.path.exists(path):
-                # Render等の環境でファイルが消失した場合のエラーハンドリング
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
             return FileResponse(path, filename=filenames[file_index])
         else:
@@ -367,8 +470,9 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
         # 過去の単一ファイル保存のデータだった場合のフォールバック
         if file_index == 0:
             path = assignment.attachment_filepath
+            if path.startswith("http"):
+                return RedirectResponse(url=path)
             if not os.path.exists(path):
-                # Render等の環境でファイルが消失した場合のエラーハンドリング
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
             return FileResponse(path, filename=assignment.attachment_filename)
         else:
@@ -381,78 +485,18 @@ def submit_assignment(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 環境変数からフォルダIDを取得（設定されていない場合はデフォルトのIDを使用）
-    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "0AFizHPTVPTjTUk9PVA")
-    if not folder_id:
-        raise HTTPException(status_code=500, detail="Google Driveの保存先フォルダIDが設定されていません。")
+    safe_username = current_user.username.replace(" ", "_")
+    file_urls, file_names = upload_files_to_drive(files, safe_username)
     
-    try:
-        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if cred_json:
-            # Render等で環境変数に不要なクォーテーションが含まれる場合の対策
-            cred_json = cred_json.strip().strip("'").strip('"')
-            
-            if not cred_json.strip():
-                raise HTTPException(status_code=500, detail="Google Drive認証情報が空になっています。Renderの環境変数 GOOGLE_CREDENTIALS_JSON に、ダウンロードしたJSONの中身をすべて貼り付けてください。")
-            
-            try:
-                creds_info = json.loads(cred_json, strict=False)
-            except json.JSONDecodeError:
-                try:
-                    # 万が一パースに失敗した場合、改行をエスケープして再試行する（フォールバック）
-                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
-                    creds_info = json.loads(cred_json_escaped, strict=False)
-                except json.JSONDecodeError as e:
-                    raise HTTPException(status_code=500, detail=f"Google Drive認証情報のフォーマットが不正です。設定を見直してください: {str(e)}")
-            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
-        else:
-            cred_file = "credentials.json"
-            if not os.path.exists(cred_file):
-                raise HTTPException(status_code=500, detail="Google Drive credentials not found.")
-            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
-            
-        service = build('drive', 'v3', credentials=creds)
-        
-        file_urls = []
-        file_names = []
-        
-        for file in files:
-            timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
-            safe_username = current_user.username.replace(" ", "_")
-            drive_file_name = f"{safe_username}_{timestamp}_{file.filename}"
-            
-            file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
-            mimetype = file.content_type or "application/octet-stream"
-            
-            file.file.seek(0)
-            file_content = file.file.read()
-            media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=mimetype, resumable=True)
-            
-            drive_file = service.files().create(
-                body=file_metadata, 
-                media_body=media, 
-                fields='id, webViewLink',
-                supportsAllDrives=True
-            ).execute()
-            
-            file_urls.append(drive_file.get('webViewLink'))
-            file_names.append(drive_file_name)
-            
-        url_str = json.dumps(file_urls)
-        name_str = json.dumps(file_names)
-    except HTTPException:
-        raise # JSON解析エラーなどはそのままフロントエンドに返す
-    except Exception as e:
-        error_str = str(e)
-        print(f"Drive upload failed: {error_str}") # RenderのLog用
-        if "File not found" in error_str:
-            raise HTTPException(status_code=500, detail=f"保存先フォルダ（ID: {folder_id}）が見つかりません。Renderの GOOGLE_DRIVE_FOLDER_ID 環境変数と、フォルダの共有設定（サービスアカウントへの権限付与）を確認してください。")
-        else:
-            raise HTTPException(status_code=500, detail=f"Google Driveへのアップロードに失敗しました: {error_str}")
+    url_str = json.dumps(file_urls)
+    name_str = json.dumps(file_names)
 
     try:
         existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
         if existing:
+            if existing.submitted_file_url:
+                delete_file_from_drive(existing.submitted_file_url)
+                
             existing.status = "提出済"
             existing.submitted_file_url = url_str
             existing.submitted_file_name = name_str
@@ -573,54 +617,6 @@ def delete_progress(progress_id: int, current_user: models.User = Depends(get_cu
         progress.deleted_at = get_jst_now()
         db.commit()
     return {"message": "deleted"}
-
-def delete_file_from_drive(file_url: str):
-    if not file_url:
-        return
-    
-    urls_to_delete = []
-    try:
-        parsed = json.loads(file_url)
-        if isinstance(parsed, list):
-            urls_to_delete = parsed
-        else:
-            urls_to_delete = [file_url]
-    except (json.JSONDecodeError, TypeError):
-        urls_to_delete = [file_url]
-        
-    if not urls_to_delete:
-        return
-
-    try:
-        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if cred_json:
-            try:
-                cred_json = cred_json.strip().strip("'").strip('"')
-                if not cred_json.strip():
-                    return
-                creds_info = json.loads(cred_json, strict=False)
-            except json.JSONDecodeError:
-                try:
-                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
-                    creds_info = json.loads(cred_json_escaped, strict=False)
-                except json.JSONDecodeError:
-                    return
-            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
-        else:
-            cred_file = "credentials.json"
-            if not os.path.exists(cred_file):
-                return
-            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.file'])
-            
-        service = build('drive', 'v3', credentials=creds)
-        for url in urls_to_delete:
-            match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
-            if not match:
-                continue
-            file_id = match.group(1)
-            service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
-    except Exception as e:
-        print(f"Failed to delete file from Drive: {e}")
 
 def cleanup_trash(db: Session):
     threshold = get_jst_now() - timedelta(days=30)
