@@ -16,7 +16,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 def get_jst_now():
-    return datetime.now(timezone.utc) + timedelta(hours=9)
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).replace(tzinfo=None)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

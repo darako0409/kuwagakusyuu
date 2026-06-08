@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 import json
 
 def get_jst_now():
-    return datetime.now(timezone.utc) + timedelta(hours=9)
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).replace(tzinfo=None)
 
 class User(Base):
     __tablename__ = "users"

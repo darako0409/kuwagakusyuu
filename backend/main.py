@@ -36,7 +36,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 models.Base.metadata.create_all(bind=engine)
 
 def get_jst_now():
-    return datetime.now(timezone.utc) + timedelta(hours=9)
+    # PostgreSQLでエラーにならないよう、タイムゾーン情報を持たない（Naiveな）日本時間にする
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).replace(tzinfo=None)
 
 # --- データベースの自動アップデート（本番環境でのカラム不足エラー対策） ---
 def upgrade_db():
@@ -365,12 +366,15 @@ def submit_assignment(
             if not cred_json.strip():
                 raise HTTPException(status_code=500, detail="Google Drive認証情報が空になっています。Renderの環境変数 GOOGLE_CREDENTIALS_JSON に、ダウンロードしたJSONの中身をすべて貼り付けてください。")
             
-            # 環境変数に実際の改行コードが含まれてしまっている場合、JSONの仕様に従ってエスケープする
-            cred_json = cred_json.replace('\n', '\\n').replace('\r', '')
             try:
                 creds_info = json.loads(cred_json, strict=False)
-            except json.JSONDecodeError as e:
-                raise HTTPException(status_code=500, detail=f"Google Drive認証情報のフォーマットが不正です。設定を見直してください: {str(e)}")
+            except json.JSONDecodeError:
+                try:
+                    # 万が一パースに失敗した場合、改行をエスケープして再試行する（フォールバック）
+                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
+                    creds_info = json.loads(cred_json_escaped, strict=False)
+                except json.JSONDecodeError as e:
+                    raise HTTPException(status_code=500, detail=f"Google Drive認証情報のフォーマットが不正です。設定を見直してください: {str(e)}")
             creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
         else:
             cred_file = "credentials.json"
@@ -562,10 +566,13 @@ def delete_file_from_drive(file_url: str):
                 cred_json = cred_json.strip().strip("'").strip('"')
                 if not cred_json.strip():
                     return
-                cred_json = cred_json.replace('\n', '\\n').replace('\r', '')
                 creds_info = json.loads(cred_json, strict=False)
             except json.JSONDecodeError:
-                return
+                try:
+                    cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
+                    creds_info = json.loads(cred_json_escaped, strict=False)
+                except json.JSONDecodeError:
+                    return
             creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
         else:
             cred_file = "credentials.json"
