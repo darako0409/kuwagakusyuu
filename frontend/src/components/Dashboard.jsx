@@ -17,7 +17,9 @@ function Dashboard() {
   const [newLesson, setNewLesson] = useState({ title: '', content: '', chapter_id: 1 });
   const [isEditingLesson, setIsEditingLesson] = useState(false);
   const [editingLessonData, setEditingLessonData] = useState({ title: '', content: '', chapter_id: 1 });
-  const [newAssignment, setNewAssignment] = useState({ title: '', description: '', lesson_id: '', template_code: '', file: null });
+  const [newAssignment, setNewAssignment] = useState({ title: '', description: '', lesson_id: '', template_code: '', files: [] });
+  const [isEditingAssignment, setIsEditingAssignment] = useState(false);
+  const [editingAssignmentData, setEditingAssignmentData] = useState({ title: '', description: '', files: [] });
   const [submitFile, setSubmitFile] = useState(null);
   const [selectedSubmitAssignment, setSelectedSubmitAssignment] = useState('');
   const [trashData, setTrashData] = useState(null); // ゴミ箱のデータ
@@ -176,7 +178,9 @@ function Dashboard() {
     const formData = new FormData();
     formData.append('title', newAssignment.title);
     formData.append('description', newAssignment.description);
-    if (newAssignment.file) formData.append('file', newAssignment.file);
+    if (newAssignment.files && newAssignment.files.length > 0) {
+      newAssignment.files.forEach(file => formData.append('files', file));
+    }
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
@@ -184,12 +188,36 @@ function Dashboard() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } 
       });
       setAssignments([...assignments, res.data]);
-      setNewAssignment({ title: '', description: '', lesson_id: '', template_code: '', file: null });
+      setNewAssignment({ title: '', description: '', lesson_id: '', template_code: '', files: [] });
       // input[type=file]の中身もクリア
       e.target.reset();
       showToast('課題を作成しました！生徒のダッシュボードに反映されました。', 'success');
     } catch(e) {
       showToast('作成に失敗しました。', 'error');
+    }
+  };
+
+  // --- 課題の更新 ---
+  const handleUpdateAssignment = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('title', editingAssignmentData.title);
+    formData.append('description', editingAssignmentData.description);
+    if (editingAssignmentData.files && editingAssignmentData.files.length > 0) {
+      editingAssignmentData.files.forEach(file => formData.append('files', file));
+    }
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const res = await axios.put(`${apiUrl}/assignments/${activeAssignment.id}`, formData, { 
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } 
+      });
+      setAssignments(assignments.map(a => a.id === res.data.id ? res.data : a));
+      setIsEditingAssignment(false);
+      showToast('課題を更新しました！', 'success');
+    } catch(e) {
+      showToast('更新に失敗しました。', 'error');
     }
   };
 
@@ -678,37 +706,94 @@ function Dashboard() {
               </div>
             ) : activeAssignment ? (
               <div className="detail-view">
-                <button onClick={() => navigate('/dashboard/assignments')} className="back-btn">
+                <button onClick={() => { navigate('/dashboard/assignments'); setIsEditingAssignment(false); }} className="back-btn">
                   <span>←</span> ホームへ戻る
                 </button>
                 
-                <div className="assignment-wrapper modern-assignment">
-                  <header className="modern-assignment-header">
-                    <h2 className="modern-assignment-title">{activeAssignment.title}</h2>
-                  </header>
-                  
-                  <div className="modern-assignment-content">
-                    <p className="modern-assignment-desc">{activeAssignment.description}</p>
+                {isEditingAssignment ? (
+                  <div className="content-wrapper">
+                    <h3 className="module-title">✏️ 課題の編集</h3>
+                    <form onSubmit={handleUpdateAssignment} className="setting-form">
+                      <div className="form-group">
+                        <label>課題タイトル</label>
+                        <input type="text" value={editingAssignmentData.title} onChange={e => setEditingAssignmentData({...editingAssignmentData, title: e.target.value})} required />
+                      </div>
+                      <div className="form-group">
+                        <label>問題文</label>
+                        <textarea value={editingAssignmentData.description} onChange={e => setEditingAssignmentData({...editingAssignmentData, description: e.target.value})} required style={{ minHeight: '200px' }}></textarea>
+                      </div>
+                      <div className="form-group">
+                        <label>追加ファイル（複数選択可）</label>
+                        <input type="file" multiple onChange={e => setEditingAssignmentData({...editingAssignmentData, files: Array.from(e.target.files)})} />
+                        <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '4px'}}>※新たにファイルを選択すると追加・更新されます。</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                        <button type="submit" className="challenge-btn" style={{ backgroundColor: '#10b981' }}>更新を保存</button>
+                        <button type="button" onClick={() => setIsEditingAssignment(false)} className="challenge-btn" style={{ backgroundColor: '#64748b' }}>キャンセル</button>
+                      </div>
+                    </form>
                   </div>
-
-                  {activeAssignment.attachment_filename && (
-                    <div className="modern-attachment-section">
-                      <h4 className="modern-attachment-title">配布資料 / 添付ファイル</h4>
-                      <a 
-                        href={`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download`} 
-                        className="modern-attachment-card"
-                      >
-                        <div className="attachment-icon">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                        </div>
-                        <div className="attachment-info">
-                          <span className="attachment-filename">{activeAssignment.attachment_filename}</span>
-                          <span className="attachment-action">クリックしてダウンロード</span>
-                        </div>
-                      </a>
+                ) : (
+                  <div className="assignment-wrapper modern-assignment">
+                    <header className="modern-assignment-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <h2 className="modern-assignment-title">{activeAssignment.title}</h2>
+                      {user.role === 'teacher' && (
+                        <button 
+                          onClick={() => {
+                            setEditingAssignmentData({ title: activeAssignment.title, description: activeAssignment.description, files: [] });
+                            setIsEditingAssignment(true);
+                          }} 
+                          className="challenge-btn"
+                          style={{ backgroundColor: '#f59e0b', padding: '8px 16px', fontSize: '0.9rem', flexShrink: 0 }}
+                        >
+                          ✏️ 編集する
+                        </button>
+                      )}
+                    </header>
+                    
+                    <div className="modern-assignment-content">
+                      <p className="modern-assignment-desc">{activeAssignment.description}</p>
                     </div>
-                  )}
-                </div>
+
+                    {(activeAssignment.attachments && activeAssignment.attachments.length > 0) ? (
+                      <div className="modern-attachment-section">
+                        <h4 className="modern-attachment-title">配布資料 / 添付ファイル</h4>
+                        {activeAssignment.attachments.map((attachment, idx) => (
+                          <a 
+                            key={idx}
+                            href={`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download/${attachment.id || idx}`} 
+                            className="modern-attachment-card"
+                            style={{ marginBottom: '8px' }}
+                          >
+                            <div className="attachment-icon">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                            </div>
+                            <div className="attachment-info">
+                              <span className="attachment-filename">{attachment.filename || attachment.name || `添付ファイル ${idx+1}`}</span>
+                              <span className="attachment-action">クリックしてダウンロード</span>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    ) : activeAssignment.attachment_filename && (
+                      <div className="modern-attachment-section">
+                        <h4 className="modern-attachment-title">配布資料 / 添付ファイル</h4>
+                        <a 
+                          href={`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download`} 
+                          className="modern-attachment-card"
+                        >
+                          <div className="attachment-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                          </div>
+                          <div className="attachment-info">
+                            <span className="attachment-filename">{activeAssignment.attachment_filename}</span>
+                            <span className="attachment-action">クリックしてダウンロード</span>
+                          </div>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="dashboard-grid">
@@ -803,8 +888,8 @@ function Dashboard() {
                         <textarea value={newAssignment.description} onChange={e => setNewAssignment({...newAssignment, description: e.target.value})} required placeholder="課題の指示や問題文を入力..."></textarea>
                       </div>
                       <div className="form-group">
-                        <label>配布ファイル（任意）</label>
-                        <input type="file" onChange={e => setNewAssignment({...newAssignment, file: e.target.files[0]})} />
+                        <label>配布ファイル（複数選択可・任意）</label>
+                        <input type="file" multiple onChange={e => setNewAssignment({...newAssignment, files: Array.from(e.target.files)})} />
                       </div>
                       <button type="submit" className="challenge-btn" style={{ width: 'fit-content' }}>作成して生徒へ配布</button>
                     </form>
