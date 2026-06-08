@@ -1,8 +1,11 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
+
+def get_jst_now():
+    return datetime.now(timezone.utc) + timedelta(hours=9)
 
 class User(Base):
     __tablename__ = "users"
@@ -65,7 +68,7 @@ class Progress(Base):
     hint_count = Column(Integer, default=0)
     submitted_file_url = Column(String, nullable=True) # Driveのリンク
     submitted_file_name = Column(String, nullable=True) # Drive上のファイル名
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=get_jst_now, onupdate=get_jst_now)
     deleted_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="progresses")

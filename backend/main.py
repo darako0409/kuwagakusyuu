@@ -35,6 +35,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 models.Base.metadata.create_all(bind=engine)
 
+def get_jst_now():
+    return datetime.now(timezone.utc) + timedelta(hours=9)
+
 # --- データベースの自動アップデート（本番環境でのカラム不足エラー対策） ---
 def upgrade_db():
     from sqlalchemy import text
@@ -109,7 +112,7 @@ def get_password_hash(password):
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = get_jst_now() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -244,7 +247,7 @@ def create_assignment(
         for file in files:
             if file.filename:
                 file_name = file.filename
-                file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
+                file_path = os.path.join(UPLOAD_DIR, f"{get_jst_now().timestamp()}_{file_name}")
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
                 file_names.append(file_name)
@@ -292,7 +295,7 @@ def update_assignment(
         for file in files:
             if file.filename:
                 file_name = file.filename
-                file_path = os.path.join(UPLOAD_DIR, f"{datetime.now().timestamp()}_{file_name}")
+                file_path = os.path.join(UPLOAD_DIR, f"{get_jst_now().timestamp()}_{file_name}")
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
                 file_names.append(file_name)
@@ -381,7 +384,7 @@ def submit_assignment(
         file_names = []
         
         for file in files:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
             safe_username = current_user.username.replace(" ", "_")
             drive_file_name = f"{safe_username}_{timestamp}_{file.filename}"
             
@@ -501,7 +504,7 @@ def delete_lesson(lesson_id: int, current_user: models.User = Depends(get_curren
         raise HTTPException(status_code=403, detail="教員権限が必要です")
     lesson = db.query(models.Lesson).get(lesson_id)
     if lesson:
-        lesson.deleted_at = datetime.now(timezone.utc)
+        lesson.deleted_at = get_jst_now()
         db.commit()
     return {"message": "deleted"}
 
@@ -511,7 +514,7 @@ def delete_assignment(assignment_id: int, current_user: models.User = Depends(ge
         raise HTTPException(status_code=403, detail="教員権限が必要です")
     assignment = db.query(models.Assignment).get(assignment_id)
     if assignment:
-        assignment.deleted_at = datetime.now(timezone.utc)
+        assignment.deleted_at = get_jst_now()
         db.commit()
     return {"message": "deleted"}
 
@@ -521,7 +524,7 @@ def delete_user(user_id: int, current_user: models.User = Depends(get_current_us
         raise HTTPException(status_code=403, detail="教員権限が必要です")
     user = db.query(models.User).get(user_id)
     if user:
-        user.deleted_at = datetime.now(timezone.utc)
+        user.deleted_at = get_jst_now()
         db.commit()
     return {"message": "deleted"}
 
@@ -531,7 +534,7 @@ def delete_progress(progress_id: int, current_user: models.User = Depends(get_cu
     if progress:
         if current_user.role != "teacher" and progress.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="他人の進捗は削除できません")
-        progress.deleted_at = datetime.now(timezone.utc)
+        progress.deleted_at = get_jst_now()
         db.commit()
     return {"message": "deleted"}
 
@@ -581,7 +584,7 @@ def delete_file_from_drive(file_url: str):
         print(f"Failed to delete file from Drive: {e}")
 
 def cleanup_trash(db: Session):
-    threshold = datetime.now(timezone.utc) - timedelta(days=30)
+    threshold = get_jst_now() - timedelta(days=30)
     
     # 30日経過した提出履歴を物理削除する前に、Drive上のファイルも削除する
     old_progresses = db.query(models.Progress).filter(models.Progress.deleted_at < threshold).all()
