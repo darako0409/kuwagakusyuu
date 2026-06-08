@@ -24,7 +24,7 @@ from database import engine, SessionLocal, get_db
 # 本番環境では環境変数からキーを取得し、ローカルではデフォルト値を使用
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-please-change-it")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24時間（1440分）に延長
 
 # --- パスワードハッシュとJWT ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
@@ -109,7 +109,7 @@ def get_password_hash(password):
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=15))
+    expire = datetime.now(timezone.utc) + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -358,8 +358,9 @@ def submit_assignment(
         if cred_json:
             # Render等で環境変数に不要なクォーテーションが含まれる場合の対策
             cred_json = cred_json.strip().strip("'").strip('"')
-            # 改行コードが文字列（\n）になってしまっている場合の対策
-            cred_json = cred_json.replace('\\n', '\n')
+            
+            if not cred_json.strip():
+                raise HTTPException(status_code=500, detail="Google Drive認証情報が空になっています。Renderの環境変数 GOOGLE_CREDENTIALS_JSON に、ダウンロードしたJSONの中身をすべて貼り付けてください。")
             
             try:
                 creds_info = json.loads(cred_json)
@@ -520,7 +521,8 @@ def delete_file_from_drive(file_url: str):
         if cred_json:
             try:
                 cred_json = cred_json.strip().strip("'").strip('"')
-                cred_json = cred_json.replace('\\n', '\n')
+                if not cred_json.strip():
+                    return
                 creds_info = json.loads(cred_json)
             except json.JSONDecodeError:
                 return
