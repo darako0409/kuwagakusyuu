@@ -3,7 +3,8 @@ import shutil
 import io
 import re
 import json
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -137,6 +138,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 # --- FastAPI アプリケーション ---
 app = FastAPI()
+
+# 未知のクラッシュが起きた際、詳細なエラー文を強制的にフロントエンドへ返す
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"サーバー内部エラー（開発者向け詳細）: {str(exc)}"}
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -421,16 +430,19 @@ def submit_assignment(
         else:
             raise HTTPException(status_code=500, detail=f"Google Driveへのアップロードに失敗しました: {error_str}")
 
-    existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
-    if existing:
-        existing.status = "提出済"
-        existing.submitted_file_url = url_str
-        existing.submitted_file_name = name_str
-    else:
-        new_progress = models.Progress(user_id=current_user.id, assignment_id=assignment_id, status="提出済", submitted_file_url=url_str, submitted_file_name=name_str)
-        db.add(new_progress)
-    db.commit()
-    return {"message": "提出完了", "urls": file_urls}
+    try:
+        existing = db.query(models.Progress).filter(models.Progress.user_id == current_user.id, models.Progress.assignment_id == assignment_id, models.Progress.deleted_at == None).first()
+        if existing:
+            existing.status = "提出済"
+            existing.submitted_file_url = url_str
+            existing.submitted_file_name = name_str
+        else:
+            new_progress = models.Progress(user_id=current_user.id, assignment_id=assignment_id, status="提出済", submitted_file_url=url_str, submitted_file_name=name_str)
+            db.add(new_progress)
+        db.commit()
+        return {"message": "提出完了", "urls": file_urls}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"データベース保存時にエラーが発生しました: {str(e)}")
 
 @app.post("/api/progresses")
 def mark_progress(progress: schemas.ProgressCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
