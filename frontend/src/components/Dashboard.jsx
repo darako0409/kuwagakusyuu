@@ -171,6 +171,30 @@ function Dashboard() {
     }
   };
 
+  // --- ファイル選択用のアシスト関数 ---
+  const handleFileSelectForNew = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      // それまで選択されていたファイルに、今回選んだファイルを追加する
+      setNewAssignment(prev => ({...prev, files: [...prev.files, ...selected]}));
+    }
+    e.target.value = ''; // ダイアログを開き直して同じファイルも選べるようにリセット
+  };
+  const handleRemoveFileForNew = (index) => {
+    setNewAssignment(prev => ({...prev, files: prev.files.filter((_, i) => i !== index)}));
+  };
+
+  const handleFileSelectForEdit = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      setEditingAssignmentData(prev => ({...prev, files: [...prev.files, ...selected]}));
+    }
+    e.target.value = '';
+  };
+  const handleRemoveFileForEdit = (index) => {
+    setEditingAssignmentData(prev => ({...prev, files: prev.files.filter((_, i) => i !== index)}));
+  };
+
   // --- 課題の作成（ファイル添付対応） ---
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
@@ -726,6 +750,19 @@ function Dashboard() {
                         <label>追加ファイル（複数選択可）</label>
                         <input type="file" multiple onChange={e => setEditingAssignmentData({...editingAssignmentData, files: Array.from(e.target.files)})} />
                         <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '4px'}}>※新たにファイルを選択すると追加・更新されます。</p>
+                    <label>追加ファイル（複数選択可・順次追加できます）</label>
+                    <input type="file" multiple onChange={handleFileSelectForEdit} />
+                    {editingAssignmentData.files && editingAssignmentData.files.length > 0 && (
+                      <ul style={{ listStyle: 'none', padding: 0, marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
+                        {editingAssignmentData.files.map((f, idx) => (
+                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '4px 0', borderBottom: idx < editingAssignmentData.files.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                            <span>📄 {f.name}</span>
+                            <button type="button" onClick={() => handleRemoveFileForEdit(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕ 削除</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '8px'}}>※ファイルを指定して更新すると、以前の添付ファイルは上書きされます。</p>
                       </div>
                       <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                         <button type="submit" className="challenge-btn" style={{ backgroundColor: '#10b981' }}>更新を保存</button>
@@ -890,6 +927,18 @@ function Dashboard() {
                       <div className="form-group">
                         <label>配布ファイル（複数選択可・任意）</label>
                         <input type="file" multiple onChange={e => setNewAssignment({...newAssignment, files: Array.from(e.target.files)})} />
+                    <label>配布ファイル（複数選択可・順次追加できます）</label>
+                    <input type="file" multiple onChange={handleFileSelectForNew} />
+                    {newAssignment.files && newAssignment.files.length > 0 && (
+                      <ul style={{ listStyle: 'none', padding: 0, marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
+                        {newAssignment.files.map((f, idx) => (
+                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '4px 0', borderBottom: idx < newAssignment.files.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                            <span>📄 {f.name}</span>
+                            <button type="button" onClick={() => handleRemoveFileForNew(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕ 削除</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                       </div>
                       <button type="submit" className="challenge-btn" style={{ width: 'fit-content' }}>作成して生徒へ配布</button>
                     </form>
