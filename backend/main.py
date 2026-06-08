@@ -353,7 +353,15 @@ def submit_assignment(
     try:
         cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
         if cred_json:
-            creds_info = json.loads(cred_json)
+            # Render等で環境変数に不要なクォーテーションが含まれる場合の対策
+            cred_json = cred_json.strip().strip("'").strip('"')
+            # 改行コードが文字列（\n）になってしまっている場合の対策
+            cred_json = cred_json.replace('\\n', '\n')
+            
+            try:
+                creds_info = json.loads(cred_json)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=500, detail=f"Google Drive認証情報のフォーマットが不正です。設定を見直してください: {str(e)}")
             creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
         else:
             cred_file = "credentials.json"
@@ -381,6 +389,8 @@ def submit_assignment(
             supportsAllDrives=True
         ).execute()
         file_url = drive_file.get('webViewLink')
+    except HTTPException:
+        raise # JSON解析エラーなどはそのままフロントエンドに返す
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Drive upload failed: {str(e)}")
 
@@ -500,7 +510,12 @@ def delete_file_from_drive(file_url: str):
     try:
         cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
         if cred_json:
-            creds_info = json.loads(cred_json)
+            try:
+                cred_json = cred_json.strip().strip("'").strip('"')
+                cred_json = cred_json.replace('\\n', '\n')
+                creds_info = json.loads(cred_json)
+            except json.JSONDecodeError:
+                return
             creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.file'])
         else:
             cred_file = "credentials.json"
