@@ -250,9 +250,8 @@ def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[Li
                 except Exception as e:
                     print(f"権限付与エラー: {e}")
                 
-                # エクセル等で権限エラーが出ないよう、ID指定の安定した直接ダウンロードリンクを生成
-                file_id = drive_file.get('id')
-                file_urls.append(f"https://drive.google.com/uc?export=download&id={file_id}")
+                # 以前のようにプレビュー用リンクを保存し、ブラウザで正しく閲覧・ダウンロードできるようにする
+                file_urls.append(drive_file.get('webViewLink'))
                 file_names.append(drive_file_name)
                 
         return file_urls, file_names
