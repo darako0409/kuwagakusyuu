@@ -405,6 +405,8 @@ def update_assignment(
     title: str = Form(...),
     description: str = Form(...),
     files: List[UploadFile] = File(None),
+    retained_file_urls: str = Form(None),
+    retained_file_names: str = Form(None),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -418,15 +420,58 @@ def update_assignment(
     assignment.title = title
     assignment.description = description
     
-    # 新しいファイルがアップロードされた場合のみ上書きする
-    if files and len(files) > 0 and files[0].filename:
-        if assignment.attachment_filepath:
-            delete_file_from_drive(assignment.attachment_filepath)
+    # 元々のファイルリストを取得
+    old_urls = []
+    old_names = []
+    if assignment.attachment_filepath:
+        try:
+            parsed_urls = json.loads(assignment.attachment_filepath)
+            parsed_names = json.loads(assignment.attachment_filename)
+            if isinstance(parsed_urls, list):
+                old_urls = parsed_urls
+                old_names = parsed_names
+            else:
+                old_urls = [assignment.attachment_filepath]
+                old_names = [assignment.attachment_filename]
+        except (json.JSONDecodeError, TypeError):
+            old_urls = [assignment.attachment_filepath]
+            old_names = [assignment.attachment_filename]
             
-        file_urls, file_names = upload_files_to_drive(files, "Teacher")
-        if file_urls:
-            assignment.attachment_filename = json.dumps(file_names)
-            assignment.attachment_filepath = json.dumps(file_urls)
+    if retained_file_urls is not None and retained_file_names is not None:
+        # フロントエンドから「残すファイル」が明示的に送られてきた場合
+        try:
+            kept_urls = json.loads(retained_file_urls)
+            kept_names = json.loads(retained_file_names)
+        except json.JSONDecodeError:
+            kept_urls = []
+            kept_names = []
+            
+        # 削除された（元々あったが残すリストにない）ファイルをDriveから削除
+        for url in old_urls:
+            if url not in kept_urls:
+                delete_file_from_drive(url)
+                
+        # 新しいファイルが追加されていればアップロード
+        new_urls = []
+        new_names = []
+        if files and len(files) > 0 and files[0].filename:
+            new_urls, new_names = upload_files_to_drive(files, "Teacher")
+            
+        final_urls = kept_urls + new_urls
+        final_names = kept_names + new_names
+        
+        assignment.attachment_filepath = json.dumps(final_urls) if final_urls else None
+        assignment.attachment_filename = json.dumps(final_names) if final_names else None
+    else:
+        # 古いUIからのリクエストの互換性維持: 新規ファイルがあれば全上書き、なければそのまま
+        if files and len(files) > 0 and files[0].filename:
+            if assignment.attachment_filepath:
+                delete_file_from_drive(assignment.attachment_filepath)
+                
+            file_urls, file_names = upload_files_to_drive(files, "Teacher")
+            if file_urls:
+                assignment.attachment_filename = json.dumps(file_names)
+                assignment.attachment_filepath = json.dumps(file_urls)
         
     db.commit()
     db.refresh(assignment)
