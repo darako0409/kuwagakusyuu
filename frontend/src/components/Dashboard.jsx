@@ -239,7 +239,7 @@ function Dashboard() {
       editingAssignmentData.files.forEach(file => formData.append('files', file));
     }
     
-    // 残す既存ファイルの情報を追加して送信
+    // --- 残す既存ファイルの情報を追加して送信 ---
     const keptUrls = editingAssignmentData.retainedFiles ? editingAssignmentData.retainedFiles.map(f => f.url) : [];
     const keptNames = editingAssignmentData.retainedFiles ? editingAssignmentData.retainedFiles.map(f => f.name) : [];
     formData.append('retained_file_urls', JSON.stringify(keptUrls));
@@ -770,7 +770,7 @@ function Dashboard() {
                       <div className="form-group">
                         {editingAssignmentData.retainedFiles && editingAssignmentData.retainedFiles.length > 0 && (
                           <div style={{ marginBottom: '16px' }}>
-                            <label>現在の添付ファイル（残すものはそのまま、消す場合は✕を押してください）</label>
+                            <label>現在の添付ファイル（残すものはそのまま、消す場合は「✕ 削除」を押してください）</label>
                             <ul style={{ listStyle: 'none', padding: 0, marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
                               {editingAssignmentData.retainedFiles.map((f, idx) => (
                                 <li key={`retained-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '4px 0', borderBottom: idx < editingAssignmentData.retainedFiles.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
