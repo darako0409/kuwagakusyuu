@@ -62,6 +62,10 @@ function Login() {
           <span className="login-brand-text">Kuwaga学習サイト</span>
         </div>
         <h2 className="login-title">{isLogin ? 'ログイン' : '新規アカウント作成'}</h2>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', textAlign: 'center', marginBottom: '20px', lineHeight: '1.5' }}>
+          ※ サーバーの最初の起動に数十秒〜1分程度かかる場合があります。<br />
+          ログイン・登録ボタンを押した後は少しお待ちください。
+        </p>
         {message && <div className={`message ${message.includes('成功') || message.includes('完了') ? 'success' : 'error'}`}>{message}</div>}
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
