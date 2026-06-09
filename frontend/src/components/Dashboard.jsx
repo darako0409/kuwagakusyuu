@@ -19,7 +19,7 @@ function Dashboard() {
   const [editingLessonData, setEditingLessonData] = useState({ title: '', content: '', chapter_id: 1 });
   const [newAssignment, setNewAssignment] = useState({ title: '', description: '', lesson_id: '', template_code: '', files: [] });
   const [isEditingAssignment, setIsEditingAssignment] = useState(false);
-  const [editingAssignmentData, setEditingAssignmentData] = useState({ title: '', description: '', files: [] });
+  const [editingAssignmentData, setEditingAssignmentData] = useState({ title: '', description: '', files: [], retainedFiles: [] });
   const [submitFiles, setSubmitFiles] = useState([]);
   const [selectedSubmitAssignment, setSelectedSubmitAssignment] = useState('');
   const [trashData, setTrashData] = useState(null); // ゴミ箱のデータ
@@ -195,6 +195,13 @@ function Dashboard() {
     setEditingAssignmentData(prev => ({...prev, files: prev.files.filter((_, i) => i !== index)}));
   };
 
+  const handleRemoveRetainedFile = (index) => {
+    setEditingAssignmentData(prev => ({
+      ...prev,
+      retainedFiles: prev.retainedFiles.filter((_, i) => i !== index)
+    }));
+  };
+
   // --- 課題の作成（ファイル添付対応） ---
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
@@ -231,6 +238,12 @@ function Dashboard() {
     if (editingAssignmentData.files && editingAssignmentData.files.length > 0) {
       editingAssignmentData.files.forEach(file => formData.append('files', file));
     }
+    
+    // 残す既存ファイルの情報を追加して送信
+    const keptUrls = editingAssignmentData.retainedFiles ? editingAssignmentData.retainedFiles.map(f => f.url) : [];
+    const keptNames = editingAssignmentData.retainedFiles ? editingAssignmentData.retainedFiles.map(f => f.name) : [];
+    formData.append('retained_file_urls', JSON.stringify(keptUrls));
+    formData.append('retained_file_names', JSON.stringify(keptNames));
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
@@ -755,7 +768,20 @@ function Dashboard() {
                         <textarea value={editingAssignmentData.description} onChange={e => setEditingAssignmentData({...editingAssignmentData, description: e.target.value})} required style={{ minHeight: '200px' }}></textarea>
                       </div>
                       <div className="form-group">
-                    <label>追加ファイル（複数選択可・順次追加できます）</label>
+                        {editingAssignmentData.retainedFiles && editingAssignmentData.retainedFiles.length > 0 && (
+                          <div style={{ marginBottom: '16px' }}>
+                            <label>現在の添付ファイル（残すものはそのまま、消す場合は✕を押してください）</label>
+                            <ul style={{ listStyle: 'none', padding: 0, marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
+                              {editingAssignmentData.retainedFiles.map((f, idx) => (
+                                <li key={`retained-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '4px 0', borderBottom: idx < editingAssignmentData.retainedFiles.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                                  <span>📄 {f.name}</span>
+                                  <button type="button" onClick={() => handleRemoveRetainedFile(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕ 削除</button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <label>新規追加ファイル（複数選択可・順次追加できます）</label>
                     <input type="file" multiple onChange={handleFileSelectForEdit} />
                     {editingAssignmentData.files && editingAssignmentData.files.length > 0 && (
                       <ul style={{ listStyle: 'none', padding: 0, marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px' }}>
@@ -767,7 +793,7 @@ function Dashboard() {
                         ))}
                       </ul>
                     )}
-                    <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '8px'}}>※ファイルを指定して更新すると、以前の添付ファイルは上書きされます。</p>
+                        <p style={{fontSize: '0.85rem', color: '#64748b', marginTop: '8px'}}>※ ✕で削除した既存のファイルは、更新保存時にゴミ箱へ移動されます。</p>
                       </div>
                       <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                         <button type="submit" className="challenge-btn" style={{ backgroundColor: '#10b981' }}>更新を保存</button>
@@ -782,7 +808,23 @@ function Dashboard() {
                       {user.role === 'teacher' && (
                         <button 
                           onClick={() => {
-                            setEditingAssignmentData({ title: activeAssignment.title, description: activeAssignment.description, files: [] });
+                            let initialRetained = [];
+                            if (activeAssignment.attachments && activeAssignment.attachments.length > 0) {
+                              initialRetained = activeAssignment.attachments.map(att => ({ name: att.filename || att.name, url: att.url }));
+                            } else if (activeAssignment.attachment_filename && activeAssignment.attachment_filepath) {
+                              try {
+                                const names = JSON.parse(activeAssignment.attachment_filename);
+                                const urls = JSON.parse(activeAssignment.attachment_filepath);
+                                if (Array.isArray(names) && Array.isArray(urls)) {
+                                  initialRetained = names.map((n, i) => ({ name: n, url: urls[i] }));
+                                } else {
+                                  initialRetained = [{ name: activeAssignment.attachment_filename, url: activeAssignment.attachment_filepath }];
+                                }
+                              } catch (err) {
+                                initialRetained = [{ name: activeAssignment.attachment_filename, url: activeAssignment.attachment_filepath }];
+                              }
+                            }
+                            setEditingAssignmentData({ title: activeAssignment.title, description: activeAssignment.description, files: [], retainedFiles: initialRetained });
                             setIsEditingAssignment(true);
                           }} 
                           className="challenge-btn"
