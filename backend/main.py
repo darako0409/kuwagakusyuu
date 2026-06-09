@@ -4,7 +4,7 @@ import io
 import re
 import json
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Request
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -15,7 +15,8 @@ from typing import List
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from urllib.parse import quote
 import models
 import schemas
 from database import engine, SessionLocal, get_db
@@ -268,6 +269,46 @@ def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[Li
             raise HTTPException(status_code=500, detail=f"保存先フォルダ（ID: {folder_id}）が見つかりません。")
         else:
             raise HTTPException(status_code=500, detail=f"Google Driveへのアップロードに失敗しました: {error_str}")
+
+# --- バックエンド経由の確実なファイルダウンロード（authuser=0 対策） ---
+def proxy_drive_file(file_id: str, fallback_url: str):
+    try:
+        cred_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if cred_json:
+            cred_json = cred_json.strip().strip("'").strip('"')
+            try:
+                creds_info = json.loads(cred_json, strict=False)
+            except json.JSONDecodeError:
+                cred_json_escaped = cred_json.replace('\n', '\\n').replace('\r', '')
+                creds_info = json.loads(cred_json_escaped, strict=False)
+            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/drive.file'])
+        else:
+            cred_file = "credentials.json"
+            if not os.path.exists(cred_file):
+                return RedirectResponse(url=fallback_url)
+            creds = service_account.Credentials.from_service_account_file(cred_file, scopes=['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/drive.file'])
+            
+        service = build('drive', 'v3', credentials=creds)
+        file_metadata = service.files().get(fileId=file_id, fields='name, mimeType', supportsAllDrives=True).execute()
+        file_name = file_metadata.get('name', 'download_file')
+        mime_type = file_metadata.get('mimeType', 'application/octet-stream')
+
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+        file_stream = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_stream, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+        
+        file_stream.seek(0)
+        encoded_filename = quote(file_name)
+        headers = {
+            'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"
+        }
+        return StreamingResponse(file_stream, media_type=mime_type, headers=headers)
+    except Exception as e:
+        print(f"Drive API download proxy failed: {e}")
+        return RedirectResponse(url=fallback_url)
 
 # --- FastAPI アプリケーション ---
 app = FastAPI()
