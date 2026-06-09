@@ -494,11 +494,6 @@ def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
         if isinstance(filepaths, list) and len(filepaths) > 0:
             path = filepaths[0]
             if path.startswith("http"):
-                # authuser=0などのパラメータによる権限エラーを防ぐため、安定したリンクに変換
-                match = re.search(r'[\?&]id=([a-zA-Z0-9_-]+)', path) or re.search(r'/d/([a-zA-Z0-9_-]+)', path)
-                if match:
-                    file_id = match.group(1)
-                    path = f"https://drive.google.com/uc?export=download&id={file_id}"
                 return RedirectResponse(url=path)
             if not os.path.exists(path):
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
@@ -508,10 +503,6 @@ def download_assignment_file(assignment_id: int, db: Session = Depends(get_db)):
         
     path = assignment.attachment_filepath
     if path.startswith("http"):
-        match = re.search(r'[\?&]id=([a-zA-Z0-9_-]+)', path) or re.search(r'/d/([a-zA-Z0-9_-]+)', path)
-        if match:
-            file_id = match.group(1)
-            path = f"https://drive.google.com/uc?export=download&id={file_id}"
         return RedirectResponse(url=path)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
@@ -529,10 +520,6 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
         if isinstance(filepaths, list) and len(filepaths) > file_index:
             path = filepaths[file_index]
             if path.startswith("http"):
-                match = re.search(r'[\?&]id=([a-zA-Z0-9_-]+)', path) or re.search(r'/d/([a-zA-Z0-9_-]+)', path)
-                if match:
-                    file_id = match.group(1)
-                    path = f"https://drive.google.com/uc?export=download&id={file_id}"
                 return RedirectResponse(url=path)
             if not os.path.exists(path):
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
@@ -544,10 +531,6 @@ def download_assignment_file_indexed(assignment_id: int, file_index: int, db: Se
         if file_index == 0:
             path = assignment.attachment_filepath
             if path.startswith("http"):
-                match = re.search(r'[\?&]id=([a-zA-Z0-9_-]+)', path) or re.search(r'/d/([a-zA-Z0-9_-]+)', path)
-                if match:
-                    file_id = match.group(1)
-                    path = f"https://drive.google.com/uc?export=download&id={file_id}"
                 return RedirectResponse(url=path)
             if not os.path.exists(path):
                 raise HTTPException(status_code=404, detail="ファイルがサーバー上に存在しません（Renderの再起動等により削除された可能性があります。再度課題を編集してアップロードしてください。）")
