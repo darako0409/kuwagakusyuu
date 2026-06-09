@@ -172,11 +172,14 @@ def delete_file_from_drive(file_url: str):
             
         service = build('drive', 'v3', credentials=creds)
         for url in urls_to_delete:
-            match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+            match = re.search(r'[\?&]id=([a-zA-Z0-9_-]+)', url) or re.search(r'/d/([a-zA-Z0-9_-]+)', url)
             if not match:
                 continue
             file_id = match.group(1)
-            service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+            try:
+                service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+            except Exception as e:
+                print(f"ファイルの削除に失敗しました (ID: {file_id}): {e}")
     except Exception as e:
         print(f"Failed to delete file from Drive: {e}")
 
