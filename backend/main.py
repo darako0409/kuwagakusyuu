@@ -29,10 +29,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24時間（1440分）に延長
 # --- パスワードハッシュとJWT ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
-# --- ファイル保存用ディレクトリ ---
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 models.Base.metadata.create_all(bind=engine)
 
 def get_jst_now():
