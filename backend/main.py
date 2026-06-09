@@ -216,8 +216,13 @@ def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[Li
         
         for file in files:
             if file.filename:
-                timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
-                drive_file_name = f"{prefix}_{timestamp}_{file.filename}"
+                if prefix == "Teacher":
+                    # 教員がアップロードした課題ファイルは元のファイル名をそのまま使う
+                    drive_file_name = file.filename
+                else:
+                    # 生徒の提出ファイル等は「名前_日時_ファイル名」にして識別しやすくする
+                    timestamp = get_jst_now().strftime('%Y%m%d_%H%M%S')
+                    drive_file_name = f"{prefix}_{timestamp}_{file.filename}" if prefix else f"{timestamp}_{file.filename}"
                 
                 file_metadata = {'name': drive_file_name, 'parents': [folder_id]}
                 mimetype = file.content_type or "application/octet-stream"
