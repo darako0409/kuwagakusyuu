@@ -250,8 +250,12 @@ def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[Li
                 except Exception as e:
                     print(f"権限付与エラー: {e}")
                 
-                # 以前のようにプレビュー用リンクを保存し、ブラウザで正しく閲覧・ダウンロードできるようにする
-                file_urls.append(drive_file.get('webViewLink'))
+                # ExcelなどのOfficeファイルはプレビュー時にGoogleアカウントの認証エラーが起きやすいため、直接ダウンロードリンクを優先する
+                is_office = file.filename and file.filename.lower().endswith(('.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt', '.csv'))
+                if is_office:
+                    file_urls.append(drive_file.get('webContentLink') or drive_file.get('webViewLink'))
+                else:
+                    file_urls.append(drive_file.get('webViewLink'))
                 file_names.append(drive_file_name)
                 
         return file_urls, file_names
