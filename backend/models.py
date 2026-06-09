@@ -51,11 +51,16 @@ class Assignment(Base):
             return []
         try:
             filenames = json.loads(self.attachment_filename)
+            filepaths = json.loads(self.attachment_filepath) if self.attachment_filepath else []
             if isinstance(filenames, list):
-                return [{"id": i, "filename": name} for i, name in enumerate(filenames)]
-        except json.JSONDecodeError:
+                result = []
+                for i, name in enumerate(filenames):
+                    url = filepaths[i] if isinstance(filepaths, list) and i < len(filepaths) else self.attachment_filepath
+                    result.append({"id": i, "filename": name, "url": url})
+                return result
+        except Exception:
             pass
-        return [{"id": 0, "filename": self.attachment_filename}]
+        return [{"id": 0, "filename": self.attachment_filename, "url": self.attachment_filepath}]
 
 class Progress(Base):
     __tablename__ = "progresses"
