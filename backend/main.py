@@ -234,11 +234,21 @@ def upload_files_to_drive(files: List[UploadFile], prefix: str = "") -> tuple[Li
                 drive_file = service.files().create(
                     body=file_metadata, 
                     media_body=media, 
-                    fields='id, webViewLink',
+                    fields='id, webViewLink, webContentLink',
                     supportsAllDrives=True
                 ).execute()
                 
-                file_urls.append(drive_file.get('webViewLink'))
+                # 明示的に「リンクを知っている全員が閲覧可能」の権限を付与する
+                try:
+                    service.permissions().create(
+                        fileId=drive_file.get('id'),
+                        body={'type': 'anyone', 'role': 'reader'}
+                    ).execute()
+                except Exception as e:
+                    print(f"権限付与エラー: {e}")
+                
+                # エクセル等で権限エラーが出ないよう、直接ダウンロード用リンクを優先する
+                file_urls.append(drive_file.get('webContentLink') or drive_file.get('webViewLink'))
                 file_names.append(drive_file_name)
                 
         return file_urls, file_names
