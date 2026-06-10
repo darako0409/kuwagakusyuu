@@ -395,6 +395,54 @@ function Dashboard() {
     }
   };
 
+  // --- ファイルダウンロード処理（認証トークン付き） ---
+  const handleDownload = async (url, filename) => {
+    const token = localStorage.getItem('token');
+    if (!url) return;
+    
+    try {
+      showToast('ダウンロードを開始しています...', 'success');
+      // URLが完全なパスでない場合は補完する
+      const downloadUrl = url.startsWith('http') ? url : `${import.meta.env.VITE_API_URL}${url.startsWith('/') ? url : `/${url}`}`;
+      
+      // バックエンドのAPI URLの場合は認証トークンを付与する
+      const isInternal = downloadUrl.includes(import.meta.env.VITE_API_URL) || !url.startsWith('http');
+      const headers = isInternal ? { Authorization: `Bearer ${token}` } : {};
+
+      const response = await axios.get(downloadUrl, {
+        headers,
+        responseType: 'blob', // バイナリデータとして取得
+      });
+
+      let finalFilename = filename || 'downloaded_file';
+      const disposition = response.headers['content-disposition'];
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (match && match[1]) {
+          // URIエンコードされている日本語ファイル名などをデコード
+          let extracted = match[1].replace(/['"]/g, '');
+          if (extracted.toLowerCase().startsWith('utf-8')) {
+            extracted = extracted.replace(/^utf-8''/i, '');
+          }
+          finalFilename = decodeURIComponent(extracted);
+        }
+      }
+
+      // 取得したバイナリデータをBlob URLに変換して強制ダウンロード
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', finalFilename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      console.error('ダウンロードエラー:', e);
+      showToast('ファイルのダウンロードに失敗しました。アクセス権がない可能性があります。', 'error');
+    }
+  };
+
   // 文中の **太字** や `コード` をHTMLタグに変換するヘルパー関数
   const parseInlineStyles = (text) => {
     let html = text.replace(/\*\*(.*?)\*\*/g, '<strong class="highlight-text">$1</strong>');
@@ -845,7 +893,11 @@ function Dashboard() {
                         {activeAssignment.attachments.map((attachment, idx) => (
                           <a 
                             key={idx}
-                            href={`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download/${attachment.id || idx}`} 
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDownload(`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download/${attachment.id || idx}`, attachment.filename || attachment.name || `添付ファイル ${idx+1}`);
+                            }}
                             className="modern-attachment-card"
                             style={{ marginBottom: '8px' }}
                           >
@@ -863,7 +915,11 @@ function Dashboard() {
                       <div className="modern-attachment-section">
                         <h4 className="modern-attachment-title">配布資料 / 添付ファイル</h4>
                         <a 
-                          href={`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download`} 
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDownload(`${import.meta.env.VITE_API_URL}/assignments/${activeAssignment.id}/download`, activeAssignment.attachment_filename);
+                          }}
                           className="modern-attachment-card"
                         >
                           <div className="attachment-icon">
@@ -1073,12 +1129,12 @@ function Dashboard() {
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     {p.submitted_file_urls && p.submitted_file_urls.length > 0 ? (
                                       p.submitted_file_urls.map((url, i) => (
-                                        <a key={i} href={url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
+                                        <a key={i} href="#" onClick={(e) => { e.preventDefault(); handleDownload(url, p.submitted_file_names && p.submitted_file_names[i] ? p.submitted_file_names[i] : `ファイル ${i + 1}`); }} style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
                                           {p.submitted_file_names && p.submitted_file_names[i] ? p.submitted_file_names[i] : `ファイル ${i + 1}`}
                                         </a>
                                       ))
                                     ) : p.submitted_file_url ? (
-                                      <a href={p.submitted_file_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
+                                      <a href="#" onClick={(e) => { e.preventDefault(); handleDownload(p.submitted_file_url, p.submitted_file_name || 'ファイルを見る'); }} style={{ color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
                                         {p.submitted_file_name || 'ファイルを見る'}
                                       </a>
                                     ) : <span style={{ color: '#94a3b8' }}>ファイルなし</span>}
