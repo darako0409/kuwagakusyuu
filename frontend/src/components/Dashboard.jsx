@@ -403,10 +403,15 @@ function Dashboard() {
     try {
       showToast('ダウンロードを開始しています...', 'success');
       // URLが完全なパスでない場合は補完する
-      const downloadUrl = url.startsWith('http') ? url : `${import.meta.env.VITE_API_URL}${url.startsWith('/') ? url : `/${url}`}`;
+      let downloadUrl = url.startsWith('http') ? url : `${import.meta.env.VITE_API_URL}${url.startsWith('/') ? url : `/${url}`}`;
       
+      // Google Driveへの直接リンク（生徒の提出ファイルなど）の場合はバックエンドのプロキシを経由させる
+      if (downloadUrl.includes('drive.google.com')) {
+        downloadUrl = `${import.meta.env.VITE_API_URL}/drive/proxy?url=${encodeURIComponent(downloadUrl)}`;
+      }
+
       // バックエンドのAPI URLの場合は認証トークンを付与する
-      const isInternal = downloadUrl.includes(import.meta.env.VITE_API_URL) || !url.startsWith('http');
+      const isInternal = downloadUrl.includes(import.meta.env.VITE_API_URL) || !downloadUrl.startsWith('http');
       const headers = isInternal ? { Authorization: `Bearer ${token}` } : {};
 
       const response = await axios.get(downloadUrl, {
